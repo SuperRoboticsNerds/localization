@@ -6,6 +6,7 @@ import math
 NUMBER_OF_PARTICLES = 1000
 VELOCITY_RANDOMNESS = 0
 ROTATION_RANDOMNESS = 0
+GAUSSIAN_STANDARD_DEVIATION = 0.1
 
 
 class Particle:
@@ -67,6 +68,7 @@ def get_probabilities(observations):
             highestBeamProbability = 0.0
             #Look at three "beams"
             for i in range(3):
+
                 closest = 100000.0
                 for wall in map:
                     (ix,iy) = get_intersection(o.get_line_from_observation(),wall)
@@ -74,9 +76,10 @@ def get_probabilities(observations):
                     if dist < closest:
                         closest = dist
                 #get probability that this is the correct distance
-                prob = asdfasdfasdf #TODO FIX ZIS
+                prob = asdfasdfasdf #TODO FIX ZIS, SOME KIND OF PROBABILITY BULLSHIT
                 if prob>highestBeamProbability:
                     highestBeamProbability = prob
+                o.w += wincrement
             probability+=highestBeamProbability
 
 
@@ -93,7 +96,7 @@ def resample():
     for particle in particles:
         resample that shit
 
-#takes two lines as input and returns the intersection of those lines
+#takes two lines as input and returns the intersection of those lines in 2D
 def get_intersection((x11,y11,x12,y12),(x21,y21,x22,y22)):
     k1 = (y12-y11)/(x12-x11)
     k2 = (y22-y21)/(x22-x21)
