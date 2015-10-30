@@ -3,10 +3,18 @@
 import random
 import math
 import copy
+import rospy
+from visualization_msgs.msg import Marker
+from visualization_msgs.msg import MarkerArray
+from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Vector3
+from geometry_msgs.msg import Point
+from std_msgs.msg import Header
 
-NUMBER_OF_PARTICLES = 1000
-VELOCITY_RANDOMNESS = 0
-ROTATION_RANDOMNESS = 0
+
+NUMBER_OF_PARTICLES = 100
+VELOCITY_RANDOMNESS = 1
+ROTATION_RANDOMNESS = 1
 GAUSSIAN_STANDARD_DEVIATION = 0.1
 
 
@@ -39,14 +47,6 @@ class Observation:
         farawayx = self.x + 100.0*math.cos(self.w)
         farawayy = self.y + 100.0*math.sin(self.w)
         return self.x, self.y, farawayx, farawayy
-
-
-def particle_filter(observations, vvel, wvel):
-    update(vvel, wvel)
-    get_probabilities(observations)
-    resample(particles)
-    return get_mean()
-
 
 def update(vel, wvel):
     for particle in particles:
@@ -122,7 +122,7 @@ def get_intersection((x11, y11, x12, y12), (x21, y21, x22, y22)):
 def get_mean():
     x = 0
     y = 0
-    w = 0
+    w = 0 # TODO This has to be done differently since the mean of 0 and 360 should not be 180...
     for particle in particles:
         x += particle.x
         y += particle.y
@@ -130,8 +130,61 @@ def get_mean():
 
     return x/NUMBER_OF_PARTICLES, y/NUMBER_OF_PARTICLES, w/NUMBER_OF_PARTICLES
 
+def particle_filter(observations, vvel, wvel):
+    update(vvel, wvel)
+    #get_probabilities(observations)
+    #resample(particles)
+    return get_mean()
+
+def publish_marker_array():
+    m_array = MarkerArray()
+    print '--------'
+    for particle in particles:
+        print particle.x
+        m_array.markers.append(create_arrow(particle.x,particle.y,particle.w))
+    particle_pub.publish(m_array)
+
+def create_arrow(x,y,w):
+    arrow = Marker()
+    arrow.header.frame_id = "/herp"
+    arrow.header.stamp = rospy.Time.now()
+    arrow.type = Marker.ARROW
+    arrow.pose.position.x = x
+    arrow.pose.position.y = y
+    arrow.pose.position.z = 0
+    arrow.pose.orientation.x = 0
+    arrow.pose.orientation.y = 0
+    arrow.pose.orientation.z = 0
+    arrow.pose.orientation.w = 1
+    arrow.scale.x = 0.1
+    arrow.scale.y = 0.1
+    arrow.scale.z = 0.1
+    arrow.color.a = 1
+    arrow.color.r = 1
+    arrow.color.g = 1
+    arrow.color.b = 1
+    return arrow
 
 wall_map = []
 particles = []
-for counter in range(NUMBER_OF_PARTICLES):
+for i in range(NUMBER_OF_PARTICLES):
     particles.append(Particle())
+
+
+
+particle_pub = rospy.Publisher('/particle_filter/particles', MarkerArray, queue_size=10)
+mean_pub = rospy.Publisher('/particle_filter/mean', Marker, queue_size=10)
+
+
+
+rospy.init_node('particle_filter', anonymous=True)
+rate = rospy.Rate(10) # 10hz
+while not rospy.is_shutdown():
+    x,y,w = particle_filter([],0.1,0.1)
+
+
+    arrow = create_arrow(x,y,w)
+    publish_marker_array()
+    #mean_pub.publish(arrow)
+    rate.sleep()
+

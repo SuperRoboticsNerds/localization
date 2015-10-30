@@ -130,6 +130,9 @@ include_directories(
 ## Declare a C++ executable
 # add_executable(localization_node src/localization_node.cpp)
 
+add_executable(particle_filter src/particle_filter.cpp)
+target_link_libraries(particle_filter ${catkin_LIBRARIES})
+
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 # add_dependencies(localization_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
