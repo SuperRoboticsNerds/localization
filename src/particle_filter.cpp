@@ -6,6 +6,7 @@
 #include "localization/Distance_message.h"
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <nav_msgs/Odometry.h>
 #include <iostream>
 #include <stdlib.h>
 #include <math.h>
@@ -15,7 +16,7 @@
 #define ROT_SPREAD 0.1
 #define NUM_PARTICLES 10000
 #define NUM_OBSERVATIONS 6
-#define SIGMA 0.1
+#define SIGMA 0.2
 #define NUM_WALLS 17
 #define XMIN 0.0
 #define XMAX 3.65
@@ -24,12 +25,15 @@
 
 //Random number tror jag, testa : number = (double)std::rand() / (double)(std::RAND_MAX)
 
+
 //TODO:switch around 1st and second array index in some of these!
 ros::Publisher particles_pub;
 ros::Publisher test_pub;
 ros::Subscriber odom_sub;
 ros::Subscriber obs_sub;
 int global_index = 0;
+double lastTime;
+double prevx,prevy,prevth,currx,curry,currth;
 double particles[3][NUM_PARTICLES]; //x,y,theta
 double temp_particles[3][NUM_PARTICLES]; // x,y,theta
 double probabilities[NUM_PARTICLES];
@@ -68,28 +72,36 @@ void init_un_known_pos(double xmin,double ymin,double xmax,double ymax){
         particles[2][j] = PI*2.0*((double)std::rand() / (double)RAND_MAX);
     }
 }
+int sign(double val){
+    return (0 < val) - (val < 0);
+}
 
-void update(double v_vel, double rot_vel){
-
+void update(){
+    double rot_vel = (currth-prevth);
+    double xdiff = currx-prevx;
+    double ydiff = curry-prevy;
+    double v_vel = sqrt(xdiff*xdiff + ydiff*ydiff);
+    if(sign(xdiff)!=sign(cos(currth))){
+        v_vel = -v_vel;
+    }
     for(int i=0;i<NUM_PARTICLES;i++){
         //TODO: fix zis
-        particles[2][i] += rot_vel*ROT_SPREAD*((double)std::rand() / (double)RAND_MAX) - ROT_SPREAD/2.0 + ROT_SPREAD*((double)std::rand() / (double)RAND_MAX);
+        particles[2][i] += rot_vel - ROT_SPREAD*rot_vel/2.0 + ROT_SPREAD*rot_vel*((double)std::rand() / (double)RAND_MAX);
         double rand_vel = ((double)std::rand() / (double)RAND_MAX);
-        particles[0][i] += v_vel*VEL_SPREAD*rand_vel*cos(particles[2][i]) - VEL_SPREAD/2.0 + VEL_SPREAD*((double)std::rand() / (double)RAND_MAX);
-        particles[1][i] += v_vel*VEL_SPREAD*rand_vel*sin(particles[2][i]) - VEL_SPREAD/2.0 + VEL_SPREAD*((double)std::rand() / (double)RAND_MAX);
+        particles[0][i] += v_vel*cos(particles[2][i]) - VEL_SPREAD*v_vel*cos(particles[2][i])/2.0 + v_vel*VEL_SPREAD*rand_vel*cos(particles[2][i]);
+        particles[1][i] += v_vel*sin(particles[2][i]) - VEL_SPREAD*v_vel*sin(particles[2][i])/2.0 + v_vel*VEL_SPREAD*rand_vel*sin(particles[2][i]);
         if (particles[0][i]<XMIN) particles[0][i] = XMIN;
         else if (particles[0][i]>XMAX) particles[0][i] = XMAX;
         if (particles[1][i]<YMIN) particles[1][i] = YMIN;
         else if (particles[1][i]>YMAX) particles[1][i] = YMAX;
+        //std::cout << particles[0][i] << " " << particles[1][i] << std::endl;
+
     }
 
-/*
-    for(int i=0;i<NUM_PARTICLES;i++){
-        particles[2][i] += 5*((double)std::rand() / (double)RAND_MAX);
-        particles[0][i] += -0.05 + 0.1*((double)std::rand() / (double)RAND_MAX);
-        particles[1][i] += -0.05 + 0.1*((double)std::rand() / (double)RAND_MAX);
-    }
-*/
+
+    prevx = currx;
+    prevy = curry;
+    prevth = currth;
 }
 
 double dist(double x1,double y1,double x2,double y2){
@@ -259,14 +271,6 @@ void resample(){
 }
 
 
-void particle_filter(){
-    update(0,0);
-    get_probabilities();
-    resample();
-    //if position update and ir update, do the rest.
-}
-
-
 void draw(){
     geometry_msgs::PoseArray poses;
     poses.header.frame_id = "/map";
@@ -307,14 +311,33 @@ void get_observations(const localization::Distance_message::ConstPtr& msg){
 }
 
 
+void odom_callback(const nav_msgs::Odometry::ConstPtr& msg){
+    currx = msg->pose.pose.position.x;
+    curry = msg->pose.pose.position.y;
+    //TODO: this is retarted. This is because of how it is set up on the kobuki simulation and we can do better irr (in real robot)
+    double roll, pitch, yaw;
+    double qx = msg->pose.pose.orientation.x;
+    double qy = msg->pose.pose.orientation.y;
+    double qz = msg->pose.pose.orientation.z;
+    double qw = msg->pose.pose.orientation.w;
+
+    tf::Quaternion q(qx,qy,qz,qw);
+    tf::Matrix3x3 m(q);
+    m.getRPY(roll, pitch, yaw);
+    //std::cout << yaw << std::endl;
+    currth = yaw;
+    has_odom = true;
+}
+
+
 int main(int argc,char **argv){
     //init_known_pos(0.0, 0.0, 0.0);
-    init_un_known_pos(0.0, 0.0, 3.5, 3.5);
+    init_un_known_pos(0.0, 0.0, 3.65, 3.65);
     ros::init(argc,argv,"particle_filter");
     ros::NodeHandle n;
     particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles", 100);
     test_pub = n.advertise<visualization_msgs::MarkerArray>("/test", 100);
-    //odom_sub = n.subscribe("/odom",100,odom_callback);
+    odom_sub = n.subscribe("/odom",100,odom_callback);
     obs_sub = n.subscribe("/ir_measurements", 100, get_observations);
 
     ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query", 100);
@@ -327,31 +350,22 @@ int main(int argc,char **argv){
         map_query_publisher.publish(bool_msg);
         ros::spinOnce();
     }
-    //observations[0] = 0.5;
-    //observations[1] = 0.5;
-    //observations[2] = 0.5;
-    //observations[3] = 0.5;
-    //observations[4] = 0.5;
-    //observations[5] = 0.5;
-    //std::cout << normal_distribution_probabilitiy(1.0,0.9) << std::endl;
-    //std::cout << normal_distribution_probabilitiy(0.9,1.0) << std::endl;
-    //std::cout << normal_distribution_probabilitiy(0.1,0.1) << std::endl;
-    //std::cout << normal_distribution_probabilitiy(1.0,1.0) << std::endl;
-    //std::cout << normal_distribution_probabilitiy(6.0,6.0) << std::endl;
+
 
     std::cout << "Started particle filtering" << std::endl;
 
     has_odom = true;
     while (ros::ok()){
         if (has_measurements && has_odom){
-            std::cout << "lall"<<std::endl;
-            update(0.05,0.0);
+            std::cout << "calculating..."<<std::endl;
+            update();
             get_probabilities();
             resample();
             draw();
             has_measurements = false;
-            //has_odom = false;
+            has_odom = false;
         }
+
         ros::spinOnce();
     }
 }
