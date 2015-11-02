@@ -13,10 +13,14 @@
 #define PI 3.14159265
 #define VEL_SPREAD 0.1
 #define ROT_SPREAD 0.1
-#define NUM_PARTICLES 1
+#define NUM_PARTICLES 10000
 #define NUM_OBSERVATIONS 6
-#define SIGMA 1.0
+#define SIGMA 0.1
 #define NUM_WALLS 17
+#define XMIN 0.0
+#define XMAX 3.65
+#define YMIN 0.0
+#define YMAX 3.65
 
 //Random number tror jag, testa : number = (double)std::rand() / (double)(std::RAND_MAX)
 
@@ -33,12 +37,12 @@ double predicted_observaions[NUM_OBSERVATIONS];
 double observations[NUM_OBSERVATIONS];
 double walls[NUM_WALLS][4];
 double sensor_positions[6][3] = {
-    {0.1,0.13,3.1416},
-    {-0.1,0.13,3.1416},
-    {0.1,-0.13,0.0},
-    {-0.1,-0.13,0.0},
-    {0.12,-0.13,1.5707},
-    {0.12,0.13,1.5707}
+    {0.1,0.13,1.5707},
+    {-0.1,0.13,1.5707},
+    {0.1,-0.13,-1.5707},
+    {-0.1,-0.13,-1.507},
+    {0.12,-0.13,0.0},
+    {0.12,0.13,0.0}
 };
 bool has_map = false;
 bool has_measurements = false;
@@ -46,7 +50,7 @@ bool has_odom = false;
 
 
 double normal_distribution_probabilitiy(double mean,double value){
-    return (1.0/(SIGMA*sqrt(2.0*PI)))*exp(-(value-mean)*(value-mean)/(2.0*SIGMA*SIGMA));
+    return (1.0/(SIGMA*sqrt(2.0*PI)))*exp(-((value-mean)*(value-mean))/(2.0*SIGMA*SIGMA));
 }
 
 void init_known_pos(double x, double y, double th){
@@ -68,10 +72,15 @@ void init_un_known_pos(double xmin,double ymin,double xmax,double ymax){
 void update(double v_vel, double rot_vel){
 
     for(int i=0;i<NUM_PARTICLES;i++){
-        particles[2][i] += rot_vel*ROT_SPREAD*((double)std::rand() / (double)RAND_MAX);
+        //TODO: fix zis
+        particles[2][i] += rot_vel*ROT_SPREAD*((double)std::rand() / (double)RAND_MAX) - ROT_SPREAD/2.0 + ROT_SPREAD*((double)std::rand() / (double)RAND_MAX);
         double rand_vel = ((double)std::rand() / (double)RAND_MAX);
-        particles[0][i] += v_vel*VEL_SPREAD*rand_vel*cos(particles[2][i]);
-        particles[1][i] += v_vel*VEL_SPREAD*rand_vel*sin(particles[2][i]);
+        particles[0][i] += v_vel*VEL_SPREAD*rand_vel*cos(particles[2][i]) - VEL_SPREAD/2.0 + VEL_SPREAD*((double)std::rand() / (double)RAND_MAX);
+        particles[1][i] += v_vel*VEL_SPREAD*rand_vel*sin(particles[2][i]) - VEL_SPREAD/2.0 + VEL_SPREAD*((double)std::rand() / (double)RAND_MAX);
+        if (particles[0][i]<XMIN) particles[0][i] = XMIN;
+        else if (particles[0][i]>XMAX) particles[0][i] = XMAX;
+        if (particles[1][i]<YMIN) particles[1][i] = YMIN;
+        else if (particles[1][i]>YMAX) particles[1][i] = YMAX;
     }
 
 /*
@@ -128,9 +137,9 @@ visualization_msgs::Marker getMarker(double x,double y,double th,double dist){
     marker.scale.y = 0.1;
     marker.scale.z = 0.1;
     marker.color.a = 1.0;
-    marker.color.r = ((double)std::rand() / (double)RAND_MAX);
-    marker.color.g = ((double)std::rand() / (double)RAND_MAX);
-    marker.color.b = ((double)std::rand() / (double)RAND_MAX);
+    marker.color.r = 1.0;
+    marker.color.g = 0.1*(double)global_index;
+    marker.color.b = 0.1*(double)global_index;
 
 
     start_point.x = x;
@@ -140,10 +149,10 @@ visualization_msgs::Marker getMarker(double x,double y,double th,double dist){
 
     intersection_point.x = x + dist*cos(th);
     intersection_point.y = y + dist*sin(th);
-    start_point.z = 0.09;
+    intersection_point.z = 0.09;
 
 
-    std::cout << x << " "<< y << " " << intersection_point.x << " "<<intersection_point.y << std::endl;
+    //std::cout << x << " "<< y << " " << intersection_point.x << " "<<intersection_point.y << std::endl;
 
     marker.points.push_back(start_point);
     marker.points.push_back(intersection_point);
@@ -156,7 +165,7 @@ visualization_msgs::Marker getMarker(double x,double y,double th,double dist){
 
 //puts the predicted observations for the particle in predicted_observations[].
 void get_predicted_observations(double px,double py, double th){
-    visualization_msgs::MarkerArray marker_array;
+    //visualization_msgs::MarkerArray marker_array;
     double x,y,theta,x2,y2,distance,shortest;
     for (int i=0;i<NUM_OBSERVATIONS;i++){
         x = px + sensor_positions[i][0];
@@ -172,15 +181,16 @@ void get_predicted_observations(double px,double py, double th){
                 }
             }
         }
-        std::cout << shortest << " ";
-        if (shortest<99.0){
-            predicted_observaions[i] = shortest;
-            global_index = i+100;
-            marker_array.markers.push_back(getMarker(x,y,theta,shortest));
-        }
+        //std::cout << x << " "<< y << " "<< theta << std::endl;
+       // marker_array.markers.push_back(getMarker(x,y,theta,shortest));
+       // std::cout << shortest << " ";
+
+       predicted_observaions[i] = shortest;
+       global_index = i+1;
+
     }
-    test_pub.publish(marker_array);
-    std::cout << std::endl;
+    //test_pub.publish(marker_array);
+    //std::cout << std::endl;
 }
 
 void get_probabilities(){
@@ -192,9 +202,12 @@ void get_probabilities(){
             //TODO: this could be optimized a lot! It could be a good idea to not have an if here but rather let the loop be decided outside. Don't know how to do this though.
             if(observations[j]>=0.01){
                 prob+=normal_distribution_probabilitiy(predicted_observaions[j],observations[j]);
+            }
+            else{
 
             }
         }
+        //std::cout << prob << std::endl;
         probabilities[i] = prob;
     }
 }
@@ -283,7 +296,7 @@ void read_map(const localization::Map_message::ConstPtr& msg){
 
 
 
-void get_measurements(const localization::Distance_message::ConstPtr& msg){
+void get_observations(const localization::Distance_message::ConstPtr& msg){
     observations[0] = msg->d1;
     observations[1] = msg->d2;
     observations[2] = msg->d3;
@@ -295,17 +308,17 @@ void get_measurements(const localization::Distance_message::ConstPtr& msg){
 
 
 int main(int argc,char **argv){
-    init_known_pos(2.85,1.116,0.0);
-    //init_un_known_pos(0.0,0.0,3.6,3.60);
+    //init_known_pos(0.0, 0.0, 0.0);
+    init_un_known_pos(0.0, 0.0, 3.5, 3.5);
     ros::init(argc,argv,"particle_filter");
     ros::NodeHandle n;
-    particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles",100);
-    test_pub = n.advertise<visualization_msgs::MarkerArray>("/test",100);
+    particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles", 100);
+    test_pub = n.advertise<visualization_msgs::MarkerArray>("/test", 100);
     //odom_sub = n.subscribe("/odom",100,odom_callback);
-    obs_sub = n.subscribe("/ir_measurements",100,get_measurements);
+    obs_sub = n.subscribe("/ir_measurements", 100, get_observations);
 
-    ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query",100);
-    ros::Subscriber map_subscriber = n.subscribe("/map_reader/map",100,read_map);
+    ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query", 100);
+    ros::Subscriber map_subscriber = n.subscribe("/map_reader/map", 100, read_map);
 
 
     while (!has_map && ros::ok()){
@@ -314,12 +327,17 @@ int main(int argc,char **argv){
         map_query_publisher.publish(bool_msg);
         ros::spinOnce();
     }
-    observations[0] = 0.5;
-    observations[1] = 0.5;
-    observations[2] = 0.5;
-    observations[3] = 0.5;
-    observations[4] = 0.5;
-    observations[5] = 0.5;
+    //observations[0] = 0.5;
+    //observations[1] = 0.5;
+    //observations[2] = 0.5;
+    //observations[3] = 0.5;
+    //observations[4] = 0.5;
+    //observations[5] = 0.5;
+    //std::cout << normal_distribution_probabilitiy(1.0,0.9) << std::endl;
+    //std::cout << normal_distribution_probabilitiy(0.9,1.0) << std::endl;
+    //std::cout << normal_distribution_probabilitiy(0.1,0.1) << std::endl;
+    //std::cout << normal_distribution_probabilitiy(1.0,1.0) << std::endl;
+    //std::cout << normal_distribution_probabilitiy(6.0,6.0) << std::endl;
 
     std::cout << "Started particle filtering" << std::endl;
 
@@ -327,7 +345,7 @@ int main(int argc,char **argv){
     while (ros::ok()){
         if (has_measurements && has_odom){
             std::cout << "lall"<<std::endl;
-            update(0.0,0.0);
+            update(0.05,0.0);
             get_probabilities();
             resample();
             draw();
