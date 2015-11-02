@@ -48,6 +48,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
 	FILES
 	Map_message.msg
+	Distance_message.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -131,7 +132,10 @@ include_directories(
 # add_executable(localization_node src/localization_node.cpp)
 
 add_executable(particle_filter src/particle_filter.cpp)
-target_link_libraries(particle_filter ${catkin_LIBRARIES} localization)
+target_link_libraries(particle_filter ${catkin_LIBRARIES})
+
+add_executable(particle_filter src/particle_filter.cpp)
+target_link_libraries(particle_filter ${catkin_LIBRARIES})
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above

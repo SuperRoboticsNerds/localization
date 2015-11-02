@@ -1,6 +1,7 @@
 import rospy
 from std_msgs.msg import Bool
 from localization.msg import Map_message
+from visualization_msgs.msg import MarkerArray
 
 pub = None
 points = []
@@ -40,6 +41,7 @@ def main():
     points = initialize_map(filename) #TODO should be a config file or something
     rospy.init_node('map_reader', anonymous=True)
     pub = rospy.Publisher('/map_reader/map', Map_message, queue_size=10)
+    marker_pub = rospy.Publisher("/my_map",MarkerArray,queue_size =10)
     rospy.Subscriber("/map_reader/query", Bool, callback)
 
     rospy.spin()
