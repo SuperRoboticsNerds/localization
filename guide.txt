@@ -1,0 +1,8 @@
+how to start the simmulation
+
+roscd localization/src/
+python map_reader.py
+roslaunch kobuki_keyop keyop.launch
+roslaunch ras_maze_launch kobuki_maze.launch map_file:=small_maze_simulation.txt x_offset:=0.5 y_offset:=0.5 theta_offset:=0.2
+rosrun localization particle_filter
+rosrun localization distance_converter
