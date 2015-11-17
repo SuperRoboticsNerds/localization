@@ -4,6 +4,7 @@
 #include "tf/transform_datatypes.h"
 #include "localization/Map_message.h"
 #include "localization/Distance_message.h"
+#include "geometry_msgs/Twist.h"
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <nav_msgs/Odometry.h>
@@ -33,6 +34,7 @@
 ros::Publisher particles_pub;
 ros::Publisher test_pub;
 ros::Subscriber odom_sub;
+ros::Subscriber vel_sub;
 ros::Subscriber obs_sub;
 int global_index = 0;
 double lastTime;
@@ -43,6 +45,7 @@ double probabilities[NUM_PARTICLES];
 double predicted_observaions[NUM_OBSERVATIONS];
 double observations[NUM_OBSERVATIONS];
 double walls[NUM_WALLS][4];
+
 //Define the positions and orientations of the sensors here. {X,Y,THETA} THETA = 0 is straight forward.
 double sensor_positions[NUM_OBSERVATIONS][3] = {
     {0.1,0.13,1.5707},
@@ -50,11 +53,23 @@ double sensor_positions[NUM_OBSERVATIONS][3] = {
     {0.1,-0.13,-1.5707},
     {-0.1,-0.13,-1.507},
     {0.12,-0.13,0.0},
-    {0.12,0.13,0.0}
-};
+    {0.12,0.13,0.0}};
+    /*
+        //{X,Y, Rotation Theta} Where pi/2 = 1.5707
+        {0.075,-0.04,3.1416},      // Short Range Left Front
+        {-0.0745,-0.04,3.1416},     // Short Range Left Back
+        {0.0745,0.04,0},       // Short Range Right Front
+        {-0.07,0.04,0},        // Short Range Right Back
+        {0.0225,0,1.5707},           // Long Range Front  //or distance_sensor_forward_right_link
+        {0.0225,0,1.5707}
+    */
+
+
 bool has_map = false;
 bool has_measurements = false;
 bool has_odom = false;
+static double x_linear_vel=0.0;
+static double z_angular_vel =0.0;
 
 
 double normal_distribution_probabilitiy(double mean,double value){
@@ -330,6 +345,13 @@ void odom_callback(const nav_msgs::Odometry::ConstPtr& msg){
     currth = yaw;
     has_odom = true;
 }
+void vel_func(const geometry_msgs::Twist twist_msg){
+
+    x_linear_vel =twist_msg.linear.x;
+    z_angular_vel = twist_msg.angular.z;
+//ROS_INFO("%f,%f",x_linear_vel, z_angular_vel);
+//std::cout << x_linear_vel<<std::endl;
+}
 
 
 int main(int argc,char **argv){
@@ -340,6 +362,7 @@ int main(int argc,char **argv){
     particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles", 100);
     test_pub = n.advertise<visualization_msgs::MarkerArray>("/test", 100);
     odom_sub = n.subscribe("/odom",100,odom_callback);
+    vel_sub = n.subscribe("/mobile_base/commands/velocity",100, vel_func);
     obs_sub = n.subscribe("/ir_measurements", 100, get_observations);
 
     ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query", 100);
@@ -360,7 +383,15 @@ int main(int argc,char **argv){
 
     has_odom = true;
     while (ros::ok()){
-        if (has_measurements && has_odom){
+        //std::cout << x_linear_vel<<std::endl;
+        if (x_linear_vel<= 1.0e-5){
+            x_linear_vel=0;
+        }
+        if (z_angular_vel<= 1.0e-5){
+            z_angular_vel=0;
+        }
+        if (x_linear_vel!=0 || z_angular_vel!=0){
+            // if the robot moves, update the particle filter
             std::cout << "calculating..."<<std::endl;
             update();
             get_probabilities();
