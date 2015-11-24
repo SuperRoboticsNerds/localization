@@ -39,7 +39,7 @@ def callback(data):
 
 def main():
     global pub, points
-    filename ="../maps/small_maze_simulation.txt"
+    filename ="../maps/small_maze.txt"
     points = initialize_map(filename) #TODO should be a config file or something
     rospy.init_node('map_reader', anonymous=True)
     pub = rospy.Publisher('/map_reader/map', Map_message, queue_size=10)

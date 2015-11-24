@@ -7,17 +7,17 @@
 #include "geometry_msgs/Twist.h"
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <nav_msgs/Odometry.h>
+#include <motors/odometry.h>
 #include <iostream>
 #include <stdlib.h>
 #include <math.h>
 
 #define PI 3.14159265
-#define VEL_SPREAD 0.3
-#define ROT_SPREAD 0.3
+#define VEL_SPREAD 4.0
+#define ROT_SPREAD 4.0
 #define NUM_PARTICLES 10000
-#define NUM_OBSERVATIONS 4
-#define SIGMA 0.3
+#define NUM_OBSERVATIONS 5
+#define SIGMA 0.5
 #define NUM_WALLS 17
 #define XMIN 0.0
 #define XMAX 3.65
@@ -38,7 +38,7 @@ ros::Subscriber vel_sub;
 ros::Subscriber obs_sub;
 int global_index = 0;
 double lastTime;
-double prevx,prevy,prevth,currx,curry,currth;
+double v_vel,rot_vel;
 double particles[3][NUM_PARTICLES]; //x,y,theta
 double temp_particles[3][NUM_PARTICLES]; // x,y,theta
 double probabilities[NUM_PARTICLES];
@@ -48,7 +48,7 @@ double walls[NUM_WALLS][4];
 
 //Define the positions and orientations of the sensors here. {X,Y,THETA} THETA = 0 is straight forward.
 double sensor_positions[NUM_OBSERVATIONS][3] = {
-    //THIS IS FOR THE SIMULATION
+    //THESE VALUES ARE FOR THE SIMULATION
     /*
     {0.1,0.13,1.5707},
     {-0.1,0.13,1.5707},
@@ -57,13 +57,11 @@ double sensor_positions[NUM_OBSERVATIONS][3] = {
     {0.12,-0.13,0.0},
     {0.12,0.13,0.0}};
     */
-    {5.0,4.0,PI/2.0},
-    {5.0,1.5,0},
-    {4.0,-4.0,-PI/2.0},
-    {-2.0,1.5,PI/2.0},
-    //{-2.5,-2.0,-PI/2.0},
-    //{-4.0,-1.5,PI},
-
+    {5.0,4.0,PI/4.0},
+    {2.0,1.5,0},
+    {4.0,-4.0,-PI/4.0},
+    {-2.0,-1.5,-PI/2.0},
+    {-2.0,1.5,PI/2.0}
 };
     /*
         //{X,Y, Rotation Theta} Where pi/2 = 1.5707
@@ -79,8 +77,6 @@ double sensor_positions[NUM_OBSERVATIONS][3] = {
 bool has_map = false;
 bool has_measurements = false;
 bool has_odom = false;
-static double x_linear_vel=0.0;
-static double z_angular_vel =0.0;
 
 
 double normal_distribution_probabilitiy(double mean,double value){
@@ -111,13 +107,7 @@ int sign(double val){
 
 //Updates the positions of the particles depending on what has happened in the odometry
 void update(){
-    double rot_vel = (currth-prevth);
-    double xdiff = currx-prevx;
-    double ydiff = curry-prevy;
-    double v_vel = sqrt(xdiff*xdiff + ydiff*ydiff);
-    if(sign(xdiff)!=sign(cos(currth))){
-        v_vel = -v_vel;
-    }
+
     for(int i=0;i<NUM_PARTICLES;i++){
         //TODO: fix zis
         particles[2][i] += rot_vel - ROT_SPREAD*rot_vel/2.0 + ROT_SPREAD*rot_vel*((double)std::rand() / (double)RAND_MAX);
@@ -132,10 +122,9 @@ void update(){
 
     }
 
+    v_vel = 0.0;
+    rot_vel = 0.0;
 
-    prevx = currx;
-    prevy = curry;
-    prevth = currth;
 }
 
 double dist(double x1,double y1,double x2,double y2){
@@ -334,34 +323,16 @@ void get_observations(const localization::Distance_message::ConstPtr& msg){
     observations[2] = msg->d3;
     observations[3] = msg->d4;
     observations[4] = msg->d5;
-    observations[5] = msg->d6;
+    //observations[5] = msg->d6;
     has_measurements = true;
 }
 
 //Updates the odometry
-void odom_callback(const nav_msgs::Odometry::ConstPtr& msg){
-    currx = msg->pose.pose.position.x;
-    curry = msg->pose.pose.position.y;
-    //TODO: this is retarted. This is because of how it is set up on the kobuki simulation and we can do better irr (in real robot)
-    double roll, pitch, yaw;
-    double qx = msg->pose.pose.orientation.x;
-    double qy = msg->pose.pose.orientation.y;
-    double qz = msg->pose.pose.orientation.z;
-    double qw = msg->pose.pose.orientation.w;
+void odom_callback(const motors::odometry::ConstPtr& msg){
+    v_vel += msg->v*msg->dt;
+    rot_vel += msg->w*msg->dt; //These are reset in the update function
 
-    tf::Quaternion q(qx,qy,qz,qw);
-    tf::Matrix3x3 m(q);
-    m.getRPY(roll, pitch, yaw);
-    //std::cout << yaw << std::endl;
-    currth = yaw;
     has_odom = true;
-}
-void vel_func(const geometry_msgs::Twist::ConstPtr& twist_msg){
-
-    x_linear_vel = twist_msg->linear.x;
-    z_angular_vel = twist_msg->angular.z;
-//ROS_INFO("%f,%f",x_linear_vel, z_angular_vel);
-//std::cout << x_linear_vel<<std::endl;
 }
 
 
@@ -372,8 +343,7 @@ int main(int argc,char **argv){
     ros::NodeHandle n;
     particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles", 100);
     test_pub = n.advertise<visualization_msgs::MarkerArray>("/test", 100);
-    odom_sub = n.subscribe("/odom",100,odom_callback);
-    vel_sub = n.subscribe("/motor_controller/twist",100, vel_func);
+    odom_sub = n.subscribe("/odometry",100,odom_callback);
     obs_sub = n.subscribe("/ir_measurements", 100, get_observations);
 
     ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query", 100);
@@ -394,14 +364,7 @@ int main(int argc,char **argv){
 
     has_odom = true; //TODO: I forgot why I set this to true here...
     while (ros::ok()){
-        //std::cout << x_linear_vel<<std::endl;
-        if (x_linear_vel<= 1.0e-5){
-            x_linear_vel=0;
-        }
-        if (z_angular_vel<= 1.0e-5){
-            z_angular_vel=0;
-        }
-        if ((x_linear_vel!=0 || z_angular_vel!=0 )&& (has_measurements && has_odom)){
+        if(has_measurements && has_odom && (v_vel>0.1 || rot_vel>0.1)){
 
             // if the robot moves, update the particle filter
             std::cout << "calculating..."<<std::endl;
