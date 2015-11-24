@@ -13,11 +13,11 @@
 #include <math.h>
 
 #define PI 3.14159265
-#define VEL_SPREAD 0.1
-#define ROT_SPREAD 0.1
+#define VEL_SPREAD 0.3
+#define ROT_SPREAD 0.3
 #define NUM_PARTICLES 10000
-#define NUM_OBSERVATIONS 6
-#define SIGMA 0.2
+#define NUM_OBSERVATIONS 4
+#define SIGMA 0.3
 #define NUM_WALLS 17
 #define XMIN 0.0
 #define XMAX 3.65
@@ -48,12 +48,23 @@ double walls[NUM_WALLS][4];
 
 //Define the positions and orientations of the sensors here. {X,Y,THETA} THETA = 0 is straight forward.
 double sensor_positions[NUM_OBSERVATIONS][3] = {
+    //THIS IS FOR THE SIMULATION
+    /*
     {0.1,0.13,1.5707},
     {-0.1,0.13,1.5707},
     {0.1,-0.13,-1.5707},
     {-0.1,-0.13,-1.507},
     {0.12,-0.13,0.0},
     {0.12,0.13,0.0}};
+    */
+    {5.0,4.0,PI/2.0},
+    {5.0,1.5,0},
+    {4.0,-4.0,-PI/2.0},
+    {-2.0,1.5,PI/2.0},
+    //{-2.5,-2.0,-PI/2.0},
+    //{-4.0,-1.5,PI},
+
+};
     /*
         //{X,Y, Rotation Theta} Where pi/2 = 1.5707
         {0.075,-0.04,3.1416},      // Short Range Left Front
@@ -345,10 +356,10 @@ void odom_callback(const nav_msgs::Odometry::ConstPtr& msg){
     currth = yaw;
     has_odom = true;
 }
-void vel_func(const geometry_msgs::Twist twist_msg){
+void vel_func(const geometry_msgs::Twist::ConstPtr& twist_msg){
 
-    x_linear_vel =twist_msg.linear.x;
-    z_angular_vel = twist_msg.angular.z;
+    x_linear_vel = twist_msg->linear.x;
+    z_angular_vel = twist_msg->angular.z;
 //ROS_INFO("%f,%f",x_linear_vel, z_angular_vel);
 //std::cout << x_linear_vel<<std::endl;
 }
@@ -362,7 +373,7 @@ int main(int argc,char **argv){
     particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles", 100);
     test_pub = n.advertise<visualization_msgs::MarkerArray>("/test", 100);
     odom_sub = n.subscribe("/odom",100,odom_callback);
-    vel_sub = n.subscribe("/mobile_base/commands/velocity",100, vel_func);
+    vel_sub = n.subscribe("/motor_controller/twist",100, vel_func);
     obs_sub = n.subscribe("/ir_measurements", 100, get_observations);
 
     ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query", 100);
@@ -381,7 +392,7 @@ int main(int argc,char **argv){
 
     //~~~~~THE PARTICLE FILTER ALGORITHM~~~~~\\
 
-    has_odom = true;
+    has_odom = true; //TODO: I forgot why I set this to true here...
     while (ros::ok()){
         //std::cout << x_linear_vel<<std::endl;
         if (x_linear_vel<= 1.0e-5){
@@ -390,7 +401,8 @@ int main(int argc,char **argv){
         if (z_angular_vel<= 1.0e-5){
             z_angular_vel=0;
         }
-        if (x_linear_vel!=0 || z_angular_vel!=0){
+        if ((x_linear_vel!=0 || z_angular_vel!=0 )&& (has_measurements && has_odom)){
+
             // if the robot moves, update the particle filter
             std::cout << "calculating..."<<std::endl;
             update();
@@ -399,7 +411,7 @@ int main(int argc,char **argv){
             draw();
             has_measurements = false;
             has_odom = false;
-        }
+       }
 
         ros::spinOnce();
     }
