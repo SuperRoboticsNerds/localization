@@ -1,0 +1,13 @@
+<launch>
+
+  <node
+ name="particle_filter" pkg="localization" type="particle_filter" />
+
+<node
+name="map_reader" pkg="localization" type="map_reader.py"/>
+
+<node
+name="distance_converter" pkg="localization" type="distance_converter"/>
+
+</launch>
+
