@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os
 import rospy
 from std_msgs.msg import Bool
 from localization.msg import Map_message
@@ -39,7 +40,7 @@ def callback(data):
 
 def main():
     global pub, points
-    filename ="../maps/small_maze.txt"
+    filename = os.path.expanduser('~')  +"/small_maze.txt"
     points = initialize_map(filename) #TODO should be a config file or something
     rospy.init_node('map_reader', anonymous=True)
     pub = rospy.Publisher('/map_reader/map', Map_message, queue_size=10)

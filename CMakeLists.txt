@@ -49,6 +49,7 @@ add_message_files(
 	FILES
 	Map_message.msg
 	Distance_message.msg
+	Position.msg
 )
 
 ## Generate services in the 'srv' folder

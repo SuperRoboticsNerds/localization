@@ -4,6 +4,7 @@
 #include "tf/transform_datatypes.h"
 #include "localization/Map_message.h"
 #include "localization/Distance_message.h"
+#include "localization/Position.h"
 #include "geometry_msgs/Twist.h"
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -13,55 +14,51 @@
 #include <math.h>
 
 #define PI 3.14159265
-#define VEL_SPREAD 4.0
-#define ROT_SPREAD 4.0
-#define NUM_PARTICLES 10000
-#define NUM_OBSERVATIONS 5
-#define SIGMA 0.5
+#define VEL_SPREAD 1.0
+#define ROT_SPREAD 0.3
+#define NUM_PARTICLES 1000
+#define NUM_OBSERVATIONS 6
+#define UPDATES_BEFORE_RESAMPLE 1
+#define TIMES_TO_RESAMPLE 1
+#define SIGMA 0.3
 #define NUM_WALLS 17
 #define XMIN 0.0
-#define XMAX 3.65
+#define XMAX 2.48
 #define YMIN 0.0
-#define YMAX 3.65
+#define YMAX 2.44
 
 //Random number tror jag, testa : number = (double)std::rand() / (double)(std::RAND_MAX)
-//TODO: only update when the robot actually has changed its position. (or update like 5 times, then stop updating)
 
-//TODO:switch around indecies in particles and temp_particles. There are 46 occurences of this problem. Should be irradicated!!!!!!!
-//Also performance could go up OR down if this is done - careful!!!
 //The sensors should be four short-range to the sides and long-range ones pointing forward and back!!!
 
 ros::Publisher particles_pub;
 ros::Publisher test_pub;
+ros::Publisher position_pub;
 ros::Subscriber odom_sub;
 ros::Subscriber vel_sub;
 ros::Subscriber obs_sub;
 int global_index = 0;
+double safety_distance = 0.05; //if particle is closer to the walls than this they will bounce
 double lastTime;
-double v_vel,rot_vel;
-double particles[3][NUM_PARTICLES]; //x,y,theta
-double temp_particles[3][NUM_PARTICLES]; // x,y,theta
+double forward_movement,rotation_movement;
+double particles[NUM_PARTICLES][3]; //x,y,theta
+double temp_particles[NUM_PARTICLES][3]; // x,y,theta
 double probabilities[NUM_PARTICLES];
 double predicted_observaions[NUM_OBSERVATIONS];
 double observations[NUM_OBSERVATIONS];
 double walls[NUM_WALLS][4];
+double cumsum[NUM_PARTICLES];
+double temp_probabilities[NUM_PARTICLES];
 
 //Define the positions and orientations of the sensors here. {X,Y,THETA} THETA = 0 is straight forward.
 double sensor_positions[NUM_OBSERVATIONS][3] = {
-    //THESE VALUES ARE FOR THE SIMULATION
-    /*
-    {0.1,0.13,1.5707},
-    {-0.1,0.13,1.5707},
-    {0.1,-0.13,-1.5707},
-    {-0.1,-0.13,-1.507},
-    {0.12,-0.13,0.0},
-    {0.12,0.13,0.0}};
-    */
-    {5.0,4.0,PI/4.0},
-    {2.0,1.5,0},
-    {4.0,-4.0,-PI/4.0},
-    {-2.0,-1.5,-PI/2.0},
-    {-2.0,1.5,PI/2.0}
+
+    {0.07,0.015,56.0*PI/180.0},
+    {0.04,0.005,0.0},
+    {0.05,-0.035,-58.0*PI/180.0},
+    {-0.00,-0.025,-PI/2.0},
+    {-0.015,0.025,PI/2.0},
+    {-0.06,0.01, PI}
 };
     /*
         //{X,Y, Rotation Theta} Where pi/2 = 1.5707
@@ -86,45 +83,23 @@ double normal_distribution_probabilitiy(double mean,double value){
 //Initialize all particles at the same position(will soon be spread out)
 void init_known_pos(double x, double y, double th){
     for(int j=0;j<NUM_PARTICLES;j++){
-        particles[0][j] = x;
-        particles[1][j] = y;
-        particles[2][j] = th;
+        particles[j][0] = x;
+        particles[j][1] = y;
+        particles[j][2] = th;
     }
 }
 
 //Initialize particles within a box, thetas random
 void init_un_known_pos(double xmin,double ymin,double xmax,double ymax){
     for(int j=0;j<NUM_PARTICLES;j++){
-        particles[0][j] = xmin + (xmax-xmin)*((double)std::rand() / (double)RAND_MAX);
-        particles[1][j] = ymin + (ymax-ymin)*((double)std::rand() / (double)RAND_MAX);
-        particles[2][j] = PI*2.0*((double)std::rand() / (double)RAND_MAX);
+        particles[j][0] = xmin + (xmax-xmin)*((double)std::rand() / (double)RAND_MAX);
+        particles[j][1] = ymin + (ymax-ymin)*((double)std::rand() / (double)RAND_MAX);
+        particles[j][2] = PI*2.0*((double)std::rand() / (double)RAND_MAX);
     }
 }
 
 int sign(double val){
     return (0 < val) - (val < 0);
-}
-
-//Updates the positions of the particles depending on what has happened in the odometry
-void update(){
-
-    for(int i=0;i<NUM_PARTICLES;i++){
-        //TODO: fix zis
-        particles[2][i] += rot_vel - ROT_SPREAD*rot_vel/2.0 + ROT_SPREAD*rot_vel*((double)std::rand() / (double)RAND_MAX);
-        double rand_vel = ((double)std::rand() / (double)RAND_MAX);
-        particles[0][i] += v_vel*cos(particles[2][i]) - VEL_SPREAD*v_vel*cos(particles[2][i])/2.0 + v_vel*VEL_SPREAD*rand_vel*cos(particles[2][i]);
-        particles[1][i] += v_vel*sin(particles[2][i]) - VEL_SPREAD*v_vel*sin(particles[2][i])/2.0 + v_vel*VEL_SPREAD*rand_vel*sin(particles[2][i]);
-        if (particles[0][i]<XMIN) particles[0][i] = XMIN;
-        else if (particles[0][i]>XMAX) particles[0][i] = XMAX;
-        if (particles[1][i]<YMIN) particles[1][i] = YMIN;
-        else if (particles[1][i]>YMAX) particles[1][i] = YMAX;
-        //std::cout << particles[0][i] << " " << particles[1][i] << std::endl;
-
-    }
-
-    v_vel = 0.0;
-    rot_vel = 0.0;
-
 }
 
 double dist(double x1,double y1,double x2,double y2){
@@ -156,6 +131,42 @@ bool get_intersection_distance(double p0_x, double p0_y, double p1_x, double p1_
 
     return false; // No collision
 }
+
+//Updates the positions of the particles depending on what has happened in the odometry
+void update(){
+    double distance;
+    for(int i=0;i<NUM_PARTICLES;i++){
+
+        particles[i][2] += rotation_movement - ROT_SPREAD*rotation_movement/2.0 + ROT_SPREAD*rotation_movement*((double)std::rand() / (double)RAND_MAX);
+        double rand_vel = ((double)std::rand() / (double)RAND_MAX);
+
+
+        particles[i][0] +=  forward_movement*cos(particles[i][2]) - VEL_SPREAD*forward_movement*cos(particles[i][2])/2.0 + forward_movement*VEL_SPREAD*rand_vel*cos(particles[i][2]);
+        particles[i][1] +=  forward_movement*sin(particles[i][2]) - VEL_SPREAD*forward_movement*sin(particles[i][2])/2.0 + forward_movement*VEL_SPREAD*rand_vel*sin(particles[i][2]);
+
+        //updated particles should never cross walls.
+        /*
+        for (int j=0;j<NUM_WALLS;j++){
+            if(get_intersection_distance(particles[i][0],particles[i][1],newx,newy,walls[j][0],walls[j][1],walls[j][2],walls[j][3],&distance)){
+                newx = particles[i][0] +  cos(particles[i][2]) * (distance - safety_distance);
+                newy = particles[i][1] +  sin(particles[i][2]) * (distance - safety_distance);
+                break; //Doesn't take into consideration that a line might cross two walls
+            }
+        }
+        */
+        if (particles[0][i]<XMIN) particles[0][i] = XMIN;
+        else if (particles[0][i]>XMAX) particles[0][i] = XMAX;
+        if (particles[1][i]<YMIN) particles[1][i] = YMIN;
+        else if (particles[1][i]>YMAX) particles[1][i] = YMAX;
+
+    }
+
+    forward_movement = 0.0;
+    rotation_movement = 0.0;
+
+}
+
+
 //Share desktop to get this to run faster over network
 visualization_msgs::Marker getMarker(double x,double y,double th,double dist){
 
@@ -206,8 +217,8 @@ void get_predicted_observations(double px,double py, double th){
         x = px + sensor_positions[i][0];
         y = py + sensor_positions[i][1];
         theta = th + sensor_positions[i][2];
-        x2 = x + 100*cos(theta);
-        y2 = y + 100*sin(theta);
+        x2 = x + 100.0*cos(theta);
+        y2 = y + 100.0*sin(theta);
         shortest = 100.0;
         for(int j=0;j<NUM_WALLS;j++){
             if(get_intersection_distance(x,y,x2,y2,walls[j][0],walls[j][1],walls[j][2],walls[j][3],&distance)){
@@ -232,11 +243,11 @@ void get_predicted_observations(double px,double py, double th){
 void get_probabilities(){
     for (int i=0;i<NUM_PARTICLES;i++){
         double prob = 0.0;
-        get_predicted_observations(particles[0][i],particles[1][i],particles[2][i]);
+        get_predicted_observations(particles[i][0],particles[i][1],particles[i][2]);
         for(int j=0;j<NUM_OBSERVATIONS;j++){
 
             //TODO: this could be optimized a lot! It could be a good idea to not have an if here but rather let the loop be decided outside. Don't know how to do this though.
-            if(observations[j]>=0.01){
+            if(observations[j]>=0.01){ //The if-statement gets rid of shitty readings.
                 prob+=normal_distribution_probabilitiy(predicted_observaions[j],observations[j]);
             }
             else{
@@ -250,37 +261,40 @@ void get_probabilities(){
 
 //Resamples the particles
 void resample(){
+    for(int derp = 0;derp<TIMES_TO_RESAMPLE;derp++){
+        //Normalize and make cumsum
+        double sum = 0.0;
+        //Calculate normalizer
+        for (int i=0;i<NUM_PARTICLES;i++){
+            sum+=probabilities[i];
+        }
+        //Cacĺculate cumsum
+        double the_sum = 0.0;
+        for (int i=0;i<NUM_PARTICLES;i++){
+            the_sum += probabilities[i]/sum;
+            cumsum[i] = the_sum;
+        }
+        //Create temporary particles
+        for(int i=0;i<NUM_PARTICLES;i++){
+            temp_particles[i][0] = particles[i][0];
+            temp_particles[i][1] = particles[i][1];
+            temp_particles[i][2] = particles[i][2];
+            temp_probabilities[i] = probabilities[i];
+        }
+        //Resample!
+        for (int i=0;i<NUM_PARTICLES;i++){
+            double temp = (double)std::rand() / (double)RAND_MAX;
 
-    //Normalize and make cumsum
-    double sum = 0.0;
-    //Calculate normalizer
-    for (int i=0;i<NUM_PARTICLES;i++){
-        sum+=probabilities[i];
-    }
-    //Cacĺculate cumsum
-    double cumsum = 0.0;
-    for (int i=0;i<NUM_PARTICLES;i++){
-        cumsum += probabilities[i]/sum;
-        probabilities[i] = cumsum;
-    }
-    //Create temporary particles
-    for(int i=0;i<NUM_PARTICLES;i++){
-        temp_particles[0][i] = particles[0][i];
-        temp_particles[1][i] = particles[1][i];
-        temp_particles[2][i] = particles[2][i];
-    }
-    //Resample!
-    for (int i=0;i<NUM_PARTICLES;i++){
-        double temp = (double)std::rand() / (double)RAND_MAX;
+            for(int pos=0;pos<NUM_PARTICLES;pos++){
+                //TODO: this if-case inside of a loop is not a good idea for efficiency :(
+                if (temp<cumsum[pos]){
 
-        for(int pos=0;pos<NUM_PARTICLES;pos++){
-            //TODO: this if-case inside of a loop is not a good idea for efficiency :(
-            if (temp<probabilities[pos]){
-
-                particles[0][i] = temp_particles[0][pos];
-                particles[1][i] = temp_particles[1][pos];
-                particles[2][i] = temp_particles[2][pos];
-                break;
+                    particles[i][0] = temp_particles[pos][0];
+                    particles[i][1] = temp_particles[pos][1];
+                    particles[i][2] = temp_particles[pos][2];
+                    probabilities[i] = temp_probabilities[i];
+                    break;
+                }
             }
         }
     }
@@ -293,9 +307,9 @@ void draw(){
     poses.header.stamp = ros::Time::now();
     for (int i=0;i<NUM_PARTICLES;i++){
         geometry_msgs::Pose pose;
-        pose.position.x = particles[0][i];
-        pose.position.y = particles[1][i];
-        double rot = particles[2][i];
+        pose.position.x = particles[i][0];
+        pose.position.y = particles[i][1];
+        double rot = particles[i][2];
         pose.orientation = tf::createQuaternionMsgFromYaw(rot);
         poses.poses.push_back(pose);
     }
@@ -319,7 +333,7 @@ void read_map(const localization::Map_message::ConstPtr& msg){
 
 void get_observations(const localization::Distance_message::ConstPtr& msg){
     observations[0] = msg->d1;
-    observations[1] = msg->d2;
+    observations[1] = msg->d2; 
     observations[2] = msg->d3;
     observations[3] = msg->d4;
     observations[4] = msg->d5;
@@ -329,24 +343,67 @@ void get_observations(const localization::Distance_message::ConstPtr& msg){
 
 //Updates the odometry
 void odom_callback(const motors::odometry::ConstPtr& msg){
-    v_vel += msg->v*msg->dt;
-    rot_vel += msg->w*msg->dt; //These are reset in the update function
+    forward_movement += msg->v*msg->dt;
+    rotation_movement += msg->w*msg->dt; //These are reset in the update function
 
     has_odom = true;
 }
 
+void publish_mean(){
+
+    localization::Position position;
+
+    //Mean of positions
+
+    double mean_x = 0.0;
+    double mean_y = 0.0;
+
+    for(int i = 0;i<NUM_PARTICLES;i++){
+        mean_x += particles[i][0];
+        mean_y += particles[i][1];
+    }
+
+    position.x = mean_x/(double)NUM_PARTICLES;
+    position.y = mean_y/(double)NUM_PARTICLES;
+
+    //mean of angles
+    double m_th_x_vec [NUM_PARTICLES];
+    double m_th_y_vec [NUM_PARTICLES];
+    for(int i=0;i<NUM_PARTICLES;i++){
+        m_th_x_vec[i] = cos(particles[i][2]);
+        m_th_y_vec[i] = sin(particles[i][2]);
+    }
+    double m_th_x = 0.0;
+    double m_th_y = 0.0;
+
+    for(int i = 0;i<NUM_PARTICLES;i++){
+        m_th_x += m_th_x_vec[i];
+        m_th_y += m_th_y_vec[i];
+    }
+    m_th_x = m_th_x/(double)NUM_PARTICLES;
+    m_th_y = m_th_y/(double)NUM_PARTICLES;
+
+    position.theta = atan2(m_th_y,m_th_x);
+
+    position_pub.publish(position);
+}
+
 
 int main(int argc,char **argv){
-    //init_known_pos(0.0, 0.0, 0.0);
-    init_un_known_pos(0.0, 0.0, 3.65, 3.65);
+    //init_known_pos(2.2, 0.5, PI/2.0);
+    init_known_pos(0.7,0.1,0.0);
+    //init_un_known_pos(0.0, 0.0, XMAX, YMAX);
     ros::init(argc,argv,"particle_filter");
     ros::NodeHandle n;
-    particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles", 100);
-    test_pub = n.advertise<visualization_msgs::MarkerArray>("/test", 100);
+
     odom_sub = n.subscribe("/odometry",100,odom_callback);
     obs_sub = n.subscribe("/ir_measurements", 100, get_observations);
 
+    particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles", 100);
+    //test_pub = n.advertise<visualization_msgs::MarkerArray>("/test", 100);
     ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query", 100);
+    position_pub = n.advertise<localization::Position>("/position", 100);
+
     ros::Subscriber map_subscriber = n.subscribe("/map_reader/map", 100, read_map);
 
 
@@ -362,16 +419,26 @@ int main(int argc,char **argv){
 
     //~~~~~THE PARTICLE FILTER ALGORITHM~~~~~\\
 
-    has_odom = true; //TODO: I forgot why I set this to true here...
+    int number_of_updates = 0;
+
     while (ros::ok()){
-        if(has_measurements && has_odom && (v_vel>0.1 || rot_vel>0.1)){
+        //std::cout << has_odom << ' '<< has_measurements << ' ' << forward_movement << ' ' << rotation_movement << std::endl;
+        if(has_measurements && has_odom && (forward_movement>0.01 || rotation_movement>0.05 || forward_movement < -0.01 || rotation_movement < -0.05)){
 
             // if the robot moves, update the particle filter
             std::cout << "calculating..."<<std::endl;
+            //TODO: investigate in if some random perturbation other than the one already in place would make things better.
             update();
             get_probabilities();
-            resample();
-            draw();
+            number_of_updates += 1;
+            if (number_of_updates>= UPDATES_BEFORE_RESAMPLE)
+            {
+                //TODO: Only resample when we have a good enough probability for particles
+                resample();
+                number_of_updates = 0;
+            }
+            draw(); //TODO: comment or uncomment this!!!
+            publish_mean();
             has_measurements = false;
             has_odom = false;
        }

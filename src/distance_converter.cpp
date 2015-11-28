@@ -45,33 +45,40 @@ double short_dist_conv(double x){
 }
 
 double sensor1_conv(double x){
-    if(x<56.0) return 0.0;
+    if(x<60.0) return 0.0;
 
     else{return translation(60.24,-0.02238,28.4,-0.003959,x);}
 }
 
 double sensor2_conv(double x){
-    if(x<100.0) return 0.0;
+    if(x<110.0) return 0.0;
 
     else{return translation(154.9,-0.0168,40.16,-0.00275,x);}
 }
 
 double sensor3_conv(double x){
-    if(x<50.0) return 0.0;
+    if(x<60.0) return 0.0;
 
     else{return translation(54.801,-0.01931,22.53,-0.003468,x);}
 }
 
 double sensor4_conv(double x){
-    if(x<50.0) return 0.0;
+    if(x<60.0) return 0.0;
 
     else{return translation(57.16,-0.01497,8.454,-1.819e-5,x);}
 }
 
 double sensor5_conv(double x){
-    if(x<50.0) return 0.0;
+    if(x<60.0) return 0.0;
 
-    else{return translation(75.19,0.01282,6.649,0.0006013,x);}
+    else{return translation(75.19,-0.01282,6.649,0.0006013,x);}
+}
+
+double sensor6_conv(double x){
+
+    if(x<120.0) return 0.0;
+
+    else{return translation(187.2,-0.01927,39.23,-0.002973,x);}
 }
 
 double get_median(double the_vector [NUM_MEASUREMENTS]){
@@ -106,6 +113,7 @@ void adcallback(const ras_arduino_msgs::ADConverter::ConstPtr& msg){
     s_3[array_pos] = (double)msg->ch3;
     s_4[array_pos] = (double)msg->ch8;
     s_5[array_pos] = (double)msg->ch7;
+    s_6[array_pos] = (double)msg->ch2;
 
 
     array_pos += 1;
@@ -119,12 +127,12 @@ void adcallback(const ras_arduino_msgs::ADConverter::ConstPtr& msg){
 
     localization::Distance_message out;
 
-    out.d1 = sensor1_conv(get_median(s_1));
-    out.d2 = sensor2_conv(get_median(s_2));
-    out.d3 = sensor3_conv(get_median(s_3));
-    out.d4 = sensor4_conv(get_median(s_4));
-    out.d5 = sensor5_conv(get_median(s_5));
-    //out.d6 = short_dist_conv((double)msg->ch6);
+    out.d1 = sensor1_conv(get_median(s_1)) * 0.01;
+    out.d2 = sensor2_conv(get_median(s_2)) * 0.01;
+    out.d3 = sensor3_conv(get_median(s_3)) * 0.01;
+    out.d4 = sensor4_conv(get_median(s_4)) * 0.01;
+    out.d5 = sensor5_conv(get_median(s_5)) * 0.01;
+    out.d6 = sensor6_conv(get_median(s_6)) * 0.01;
     distance_pub.publish(out);
 }
 

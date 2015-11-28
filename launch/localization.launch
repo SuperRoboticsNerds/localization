@@ -1,6 +1,6 @@
 <launch>
 
-  <node
+<node
  name="particle_filter" pkg="localization" type="particle_filter" />
 
 <node
