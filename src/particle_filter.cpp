@@ -34,6 +34,7 @@
 ros::Publisher particles_pub;
 ros::Publisher test_pub;
 ros::Publisher position_pub;
+ros::Publisher beams_pub;
 ros::Subscriber odom_sub;
 ros::Subscriber vel_sub;
 ros::Subscriber obs_sub;
@@ -166,46 +167,69 @@ void update(){
 
 }
 
+void publishBeams(double px,double py,double th){
+    visualization_msgs::MarkerArray marker_array;
 
-//Share desktop to get this to run faster over network
-visualization_msgs::Marker getMarker(double x,double y,double th,double dist){
+    for(int i=0;i<NUM_OBSERVATIONS;i++){
 
-    visualization_msgs::Marker marker;
-    geometry_msgs::Point start_point;
-    geometry_msgs::Point intersection_point;
+        visualization_msgs::Marker marker;
+        geometry_msgs::Point start_point;
+        geometry_msgs::Point intersection_point;
 
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.action = visualization_msgs::Marker::ADD;
-    marker.header.frame_id = "/map";
-    marker.header.stamp = ros::Time::now();
-    marker.id = global_index;
-    marker.scale.x = 0.01;
-    marker.scale.y = 0.1;
-    marker.scale.z = 0.1;
-    marker.color.a = 1.0;
-    marker.color.r = 1.0;
-    marker.color.g = 0.1*(double)global_index;
-    marker.color.b = 0.1*(double)global_index;
+        marker.type = visualization_msgs::Marker::LINE_STRIP;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.header.frame_id = "/map";
+        marker.header.stamp = ros::Time::now();
+        marker.id = i;
+        marker.scale.x = 0.01;
+        marker.scale.y = 0.1;
+        marker.scale.z = 0.1;
+        marker.color.a = 1.0;
+        marker.color.r = 1.0;
+        marker.color.g = 0.1*(double)global_index;
+        marker.color.b = 0.1*(double)global_index;
 
+        theta = th + sensor_positions[i][2];
+        x = px + sensor_positions[i][0]*cos(th) - sensor_positions[i][1]*sin(th);
+        y = py + sensor_positions[i][0]*sin(th) + sensor_positions[i][1]*cos(th);
 
-    start_point.x = x;
-    start_point.y = y;
-    start_point.z = 0.09;
+        x2 = x + 100.0*cos(th);
+        y2 = y + 100.0*sin(th);
+        shortest = 100.0;
+        for(int j=0;j<NUM_WALLS;j++){
+            if(get_intersection_distance(x,y,x2,y2,walls[j][0],walls[j][1],walls[j][2],walls[j][3],&distance)){
+                if (distance<shortest){
+                    shortest = distance;
+                }
+            }
+        }
 
+        start_point.x = x;
+        start_point.y = y;
+        start_point.z = 0.09;
 
-    intersection_point.x = x + dist*cos(th);
-    intersection_point.y = y + dist*sin(th);
-    intersection_point.z = 0.09;
+        if(obserations[i] >0.01){
 
+            intersection_point.x = x + shortest*cos(th);
+            intersection_point.y = y + shortest*sin(th);
+            intersection_point.z = 0.09;
+        }
+        else{
+            intersection_point.x = x ;
+            intersection_point.y = y;
+            intersection_point.z = 0.09;
 
-    //std::cout << x << " "<< y << " " << intersection_point.x << " "<<intersection_point.y << std::endl;
+        }
 
-    marker.points.push_back(start_point);
-    marker.points.push_back(intersection_point);
+        marker.points.push_back(start_point);
+        marker.points.push_back(intersection_point);
 
+        marker_array.markers.push_back(marker);
 
+    }
 
-    return marker;
+    breams_pub.publish(marker_array);
+
 
 }
 
@@ -214,9 +238,10 @@ void get_predicted_observations(double px,double py, double th){
     //visualization_msgs::MarkerArray marker_array;
     double x,y,theta,x2,y2,distance,shortest;
     for (int i=0;i<NUM_OBSERVATIONS;i++){
-        x = px + sensor_positions[i][0];
-        y = py + sensor_positions[i][1];
         theta = th + sensor_positions[i][2];
+        x = px + sensor_positions[i][0]*cos(th) - sensor_positions[i][1]*sin(th);
+        y = py + sensor_positions[i][0]*sin(th) + sensor_positions[i][1]*cos(th);
+
         x2 = x + 100.0*cos(theta);
         y2 = y + 100.0*sin(theta);
         shortest = 100.0;
@@ -329,8 +354,6 @@ void read_map(const localization::Map_message::ConstPtr& msg){
 
 }
 
-
-
 void get_observations(const localization::Distance_message::ConstPtr& msg){
     observations[0] = msg->d1;
     observations[1] = msg->d2; 
@@ -400,7 +423,7 @@ int main(int argc,char **argv){
     obs_sub = n.subscribe("/ir_measurements", 100, get_observations);
 
     particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles", 100);
-    //test_pub = n.advertise<visualization_msgs::MarkerArray>("/test", 100);
+    beams_pub = n.advertise<visualization_msgs::MarkerArray>("/beams", 100);
     ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query", 100);
     position_pub = n.advertise<localization::Position>("/position", 100);
 
