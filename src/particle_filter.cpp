@@ -15,8 +15,8 @@
 
 #define PI 3.14159265
 #define VEL_SPREAD 0.5
-#define ROT_SPREAD 0.2
-#define NUM_PARTICLES 1000
+#define ROT_SPREAD 0.1
+#define NUM_PARTICLES 10000
 #define NUM_OBSERVATIONS 6
 #define UPDATES_BEFORE_RESAMPLE 1
 #define TIMES_TO_RESAMPLE 1
@@ -35,6 +35,7 @@ ros::Publisher particles_pub;
 ros::Publisher test_pub;
 ros::Publisher position_pub;
 ros::Publisher beams_pub;
+ros::Publisher pos_marker_pub;
 ros::Subscriber odom_sub;
 ros::Subscriber vel_sub;
 ros::Subscriber obs_sub;
@@ -54,12 +55,12 @@ double temp_probabilities[NUM_PARTICLES];
 //Define the positions and orientations of the sensors here. {X,Y,THETA} THETA = 0 is straight forward.
 double sensor_positions[NUM_OBSERVATIONS][3] = {
 
-    {0.07,0.015,56.0*PI/180.0},
-    {0.04,0.005,0.0},
-    {0.05,-0.035,-58.0*PI/180.0},
-    {-0.00,-0.025,-PI/2.0},
-    {-0.015,0.025,PI/2.0},
-    {-0.06,0.01, PI}
+    {0.07,0.015,50.0*PI/180.0},
+    {0.04,0.0,0.0},
+    {0.07,-0.015,-60.0*PI/180.0},
+    {0.0,-0.02,-PI/2.0},
+    {0.0,0.02,PI/2.0},
+    {-0.06,0.0, PI}
 };
     /*
         //{X,Y, Rotation Theta} Where pi/2 = 1.5707
@@ -136,7 +137,6 @@ bool get_intersection_distance(double p0_x, double p0_y, double p1_x, double p1_
 //Updates the positions of the particles depending on what has happened in the odometry
 void update(){
 
-
     double forward_while_update = forward_movement;
     double rotation_while_update = rotation_movement;
 
@@ -168,9 +168,6 @@ void update(){
         else if (particles[1][i]>YMAX) particles[1][i] = YMAX;
 
     }
-
-
-
 }
 
 void publishBeams(double px,double py,double th){
@@ -193,16 +190,16 @@ void publishBeams(double px,double py,double th){
         marker.scale.y = 0.1;
         marker.scale.z = 0.1;
         marker.color.a = 1.0;
-        marker.color.r = 1.0;
+        marker.color.r = 0.0;
         marker.color.g = 0.1;
-        marker.color.b = 0.1;
+        marker.color.b = 1.0;
 
         theta = th + sensor_positions[i][2];
-        x = px + sensor_positions[i][0]*cos(th) - sensor_positions[i][1]*sin(th);
-        y = py + sensor_positions[i][0]*sin(th) + sensor_positions[i][1]*cos(th);
+        x = px + sensor_positions[i][0]*cos(theta) - sensor_positions[i][1]*sin(theta);
+        y = py + sensor_positions[i][0]*sin(theta) + sensor_positions[i][1]*cos(theta);
 
-        x2 = x + 100.0*cos(th);
-        y2 = y + 100.0*sin(th);
+        x2 = x + 100.0*cos(theta);
+        y2 = y + 100.0*sin(theta);
         shortest = 100.0;
         for(int j=0;j<NUM_WALLS;j++){
             if(get_intersection_distance(x,y,x2,y2,walls[j][0],walls[j][1],walls[j][2],walls[j][3],&distance)){
@@ -218,12 +215,12 @@ void publishBeams(double px,double py,double th){
 
         if(observations[i] >0.01){
 
-            intersection_point.x = x + shortest*cos(th);
-            intersection_point.y = y + shortest*sin(th);
+            intersection_point.x = x + shortest*cos(theta);
+            intersection_point.y = y + shortest*sin(theta);
             intersection_point.z = 0.09;
         }
         else{
-            intersection_point.x = x ;
+            intersection_point.x = x;
             intersection_point.y = y;
             intersection_point.z = 0.09;
 
@@ -417,6 +414,36 @@ void publish_mean(){
     position.theta = atan2(m_th_y,m_th_x);
 
     position_pub.publish(position);
+
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "/map";
+    marker.header.stamp = ros::Time::now();
+
+    marker.ns = "basic_shapes";
+    marker.id = 10;
+
+    marker.type = shape;
+
+    marker.action = visualization_msgs::Marker::ADD;
+
+    marker.pose.position.x = 0;
+    marker.pose.position.y = 0;
+    marker.pose.position.z = 0;
+    marker.pose.orientation.x = 0.0;
+    marker.pose.orientation.y = 0.0;
+    marker.pose.orientation.z = 0.0;
+    marker.pose.orientation.w = 1.0;
+
+    marker.scale.x = 1.0;
+    marker.scale.y = 0.1;
+    marker.scale.z = 0.1;
+
+    marker.color.r = 0.0f;
+    marker.color.g = 1.0f;
+    marker.color.b = 0.0f;
+    marker.color.a = 1.0;
+
+    publishBeams(position.x, position.y, position.theta);
 }
 
 
@@ -434,6 +461,7 @@ int main(int argc,char **argv){
     beams_pub = n.advertise<visualization_msgs::MarkerArray>("/beams", 100);
     ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query", 100);
     position_pub = n.advertise<localization::Position>("/position", 100);
+    pos_marker_pub = n.advertise<visualization_msgs::Marker>("/pos_marker", 100);
 
     ros::Subscriber map_subscriber = n.subscribe("/map_reader/map", 100, read_map);
 
