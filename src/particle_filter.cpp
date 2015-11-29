@@ -14,8 +14,8 @@
 #include <math.h>
 
 #define PI 3.14159265
-#define VEL_SPREAD 1.0
-#define ROT_SPREAD 0.3
+#define VEL_SPREAD 0.5
+#define ROT_SPREAD 0.2
 #define NUM_PARTICLES 1000
 #define NUM_OBSERVATIONS 6
 #define UPDATES_BEFORE_RESAMPLE 1
@@ -135,15 +135,22 @@ bool get_intersection_distance(double p0_x, double p0_y, double p1_x, double p1_
 
 //Updates the positions of the particles depending on what has happened in the odometry
 void update(){
-    double distance;
+
+
+    double forward_while_update = forward_movement;
+    double rotation_while_update = rotation_movement;
+
+    forward_movement = 0.0;
+    rotation_movement = 0.0;
+
     for(int i=0;i<NUM_PARTICLES;i++){
 
-        particles[i][2] += rotation_movement - ROT_SPREAD*rotation_movement/2.0 + ROT_SPREAD*rotation_movement*((double)std::rand() / (double)RAND_MAX);
-        double rand_vel = ((double)std::rand() / (double)RAND_MAX);
+        particles[i][2] += rotation_while_update + ROT_SPREAD*rotation_while_update*(((double)std::rand() / (double)RAND_MAX)-0.5);
+        double rand_vel = ((double)std::rand() / (double)RAND_MAX) - 0.5;
 
 
-        particles[i][0] +=  forward_movement*cos(particles[i][2]) - VEL_SPREAD*forward_movement*cos(particles[i][2])/2.0 + forward_movement*VEL_SPREAD*rand_vel*cos(particles[i][2]);
-        particles[i][1] +=  forward_movement*sin(particles[i][2]) - VEL_SPREAD*forward_movement*sin(particles[i][2])/2.0 + forward_movement*VEL_SPREAD*rand_vel*sin(particles[i][2]);
+        particles[i][0] +=  forward_while_update*cos(particles[i][2]) + forward_while_update*VEL_SPREAD*rand_vel*cos(particles[i][2]);
+        particles[i][1] +=  forward_while_update*sin(particles[i][2]) + forward_while_update*VEL_SPREAD*rand_vel*sin(particles[i][2]);
 
         //updated particles should never cross walls.
         /*
@@ -162,13 +169,14 @@ void update(){
 
     }
 
-    forward_movement = 0.0;
-    rotation_movement = 0.0;
+
 
 }
 
 void publishBeams(double px,double py,double th){
     visualization_msgs::MarkerArray marker_array;
+
+    double x,y,theta,x2,y2,distance,shortest;
 
     for(int i=0;i<NUM_OBSERVATIONS;i++){
 
@@ -186,8 +194,8 @@ void publishBeams(double px,double py,double th){
         marker.scale.z = 0.1;
         marker.color.a = 1.0;
         marker.color.r = 1.0;
-        marker.color.g = 0.1*(double)global_index;
-        marker.color.b = 0.1*(double)global_index;
+        marker.color.g = 0.1;
+        marker.color.b = 0.1;
 
         theta = th + sensor_positions[i][2];
         x = px + sensor_positions[i][0]*cos(th) - sensor_positions[i][1]*sin(th);
@@ -208,7 +216,7 @@ void publishBeams(double px,double py,double th){
         start_point.y = y;
         start_point.z = 0.09;
 
-        if(obserations[i] >0.01){
+        if(observations[i] >0.01){
 
             intersection_point.x = x + shortest*cos(th);
             intersection_point.y = y + shortest*sin(th);
@@ -228,7 +236,7 @@ void publishBeams(double px,double py,double th){
 
     }
 
-    breams_pub.publish(marker_array);
+    beams_pub.publish(marker_array);
 
 
 }
@@ -360,7 +368,7 @@ void get_observations(const localization::Distance_message::ConstPtr& msg){
     observations[2] = msg->d3;
     observations[3] = msg->d4;
     observations[4] = msg->d5;
-    //observations[5] = msg->d6;
+    observations[5] = msg->d6;
     has_measurements = true;
 }
 
@@ -414,7 +422,7 @@ void publish_mean(){
 
 int main(int argc,char **argv){
     //init_known_pos(2.2, 0.5, PI/2.0);
-    init_known_pos(0.7,0.1,0.0);
+    init_known_pos(0.3,1.0,0.0);
     //init_un_known_pos(0.0, 0.0, XMAX, YMAX);
     ros::init(argc,argv,"particle_filter");
     ros::NodeHandle n;
