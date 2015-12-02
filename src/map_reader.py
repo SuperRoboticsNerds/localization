@@ -40,7 +40,7 @@ def callback(data):
 
 def main():
     global pub, points
-    filename = os.path.expanduser('~')  +"/catkin_ws/src/ras_maze_map/maps/small_maze.txt"
+    filename = os.path.expanduser('~')  +"/catkin_ws/src/ras_maze/ras_maze_map/maps/small_maze.txt"
     #filename = os.path.expanduser('~') + "/catkin_ws/src/ras_maze_map/maps/contest_rehersal_maze.txt"
     points = initialize_map(filename) #TODO should be a config file or something
     rospy.init_node('map_reader', anonymous=True)

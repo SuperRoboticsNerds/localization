@@ -37,7 +37,7 @@ ros::Publisher pos_marker_pub;
 ros::Subscriber odom_sub;
 ros::Subscriber vel_sub;
 ros::Subscriber obs_sub;
-ros::NodeHandle nh;
+
 int number_of_walls = 0;
 int global_index = 0;
 int observations_actually_observed = 0;
@@ -67,7 +67,7 @@ double maze_xmax = 0.0;
 double maze_ymax = 0.0;
 
 //Define the positions and orientations of the sensors here. {X,Y,THETA} THETA = 0 is straight forward.
-double sensor_positions[NUM_OBSERVATIONS][3] = {
+double sensor_positions[NUM_OBSERVATIONS][3];
 
     /*
     //Erik's measurements (crude)
@@ -79,6 +79,7 @@ double sensor_positions[NUM_OBSERVATIONS][3] = {
     {0.0,0.02,PI/2.0},
     {-0.06,0.0, PI}
 */
+/*
     //Mattias' measurements (ir sensor)
     {0.042,0.022,50.0*PI/180.0},
     {0.03,-0.009,0.0},
@@ -86,9 +87,8 @@ double sensor_positions[NUM_OBSERVATIONS][3] = {
     {-0.031,-0.025,-PI/2.0},
     {-0.013,0.026,PI/2.0},
     {-0.09,0.017, PI}
-
-};
-    /*
+*/
+/*
         //{X,Y, Rotation Theta} Where pi/2 = 1.5707
         {0.075,-0.04,3.1416},      // Short Range Left Front
         {-0.0745,-0.04,3.1416},     // Short Range Left Back
@@ -486,7 +486,7 @@ void publish_mean(){
     position_pub.publish(position);
 }
 
-bool setup(){
+bool setup(ros::NodeHandle nh){
     if (!nh.hasParam("has_parameters")){
         return false;
     }
@@ -529,20 +529,22 @@ int main(int argc,char **argv){
 
     ros::init(argc,argv,"particle_filter");
 
-    if(!setup()){
+    ros::NodeHandle n;
+
+    if(!setup(n)){
         return 1; //Error, no parameters
     }
 
-    odom_sub = nh.subscribe("/odometry",100,odom_callback);
-    obs_sub = nh.subscribe("/ir_measurements", 100, get_observations);
+    odom_sub = n.subscribe("/odometry",100,odom_callback);
+    obs_sub = n.subscribe("/ir_measurements", 100, get_observations);
 
-    particles_pub = nh.advertise<geometry_msgs::PoseArray>("/particles", 100);
-    beams_pub = nh.advertise<visualization_msgs::MarkerArray>("/beams", 100);
-    ros::Publisher map_query_publisher = nh.advertise<std_msgs::Bool>("/map_reader/query", 100);
-    position_pub = nh.advertise<localization::Position>("/position", 100);
-    pos_marker_pub = nh.advertise<visualization_msgs::Marker>("/pos_marker", 100);
+    particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles", 100);
+    beams_pub = n.advertise<visualization_msgs::MarkerArray>("/beams", 100);
+    ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query", 100);
+    position_pub = n.advertise<localization::Position>("/position", 100);
+    pos_marker_pub = n.advertise<visualization_msgs::Marker>("/pos_marker", 100);
 
-    ros::Subscriber map_subscriber = nh.subscribe("/map_reader/map", 100, read_map);
+    ros::Subscriber map_subscriber = n.subscribe("/map_reader/map", 100, read_map);
 
 
     while (!has_map && ros::ok()){
