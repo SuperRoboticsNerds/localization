@@ -12,10 +12,10 @@
 #include <iostream>
 #include <stdlib.h>
 #include <math.h>
+#include <boost/lexical_cast.hpp>
 
 #define PI 3.14159265
-#define VEL_SPREAD 0.7
-#define ROT_SPREAD 0.3
+
 #define NUM_PARTICLES 10000
 #define NUM_OBSERVATIONS 6
 #define UPDATES_BEFORE_RESAMPLE 5
@@ -23,9 +23,7 @@
 #define SIGMA 0.001
 #define NUM_WALLS 100 //This is just because I don't know how many they are
 #define XMIN 0.0
-#define XMAX 2.48
 #define YMIN 0.0
-#define YMAX 2.44
 
 //Random number tror jag, testa : number = (double)std::rand() / (double)(std::RAND_MAX)
 
@@ -39,6 +37,7 @@ ros::Publisher pos_marker_pub;
 ros::Subscriber odom_sub;
 ros::Subscriber vel_sub;
 ros::Subscriber obs_sub;
+ros::NodeHandle nh;
 int number_of_walls = 0;
 int global_index = 0;
 int observations_actually_observed = 0;
@@ -54,6 +53,18 @@ double temp_observations[NUM_OBSERVATIONS];
 double walls[NUM_WALLS][4];
 double cumsum[NUM_PARTICLES];
 double temp_probabilities[NUM_PARTICLES];
+
+
+
+// Rosparam settings
+
+double rot_spread = 0.0;
+double vel_spread = 0.0;
+double prob_sigma = 0.0;
+int updates_before_resample = 0;
+int times_to_resample = 0;
+double maze_xmax = 0.0;
+double maze_ymax = 0.0;
 
 //Define the positions and orientations of the sensors here. {X,Y,THETA} THETA = 0 is straight forward.
 double sensor_positions[NUM_OBSERVATIONS][3] = {
@@ -160,12 +171,12 @@ void update(){
 
     for(int i=0;i<NUM_PARTICLES;i++){
 
-        particles[i][2] += rotation_while_update + ROT_SPREAD*rotation_while_update*(((double)std::rand() / (double)RAND_MAX)-0.5);
+        particles[i][2] += rotation_while_update + rot_spread*rotation_while_update*(((double)std::rand() / (double)RAND_MAX)-0.5);
         double rand_vel = ((double)std::rand() / (double)RAND_MAX) - 0.5;
 
 
-        particles[i][0] +=  forward_while_update*cos(particles[i][2]) + forward_while_update*VEL_SPREAD*rand_vel*cos(particles[i][2]);
-        particles[i][1] +=  forward_while_update*sin(particles[i][2]) + forward_while_update*VEL_SPREAD*rand_vel*sin(particles[i][2]);
+        particles[i][0] +=  forward_while_update*cos(particles[i][2]) + forward_while_update*vel_spread*rand_vel*cos(particles[i][2]);
+        particles[i][1] +=  forward_while_update*sin(particles[i][2]) + forward_while_update*vel_spread*rand_vel*sin(particles[i][2]);
 
         //updated particles should never cross walls.
         /*
@@ -178,9 +189,9 @@ void update(){
         }
         */
         if (particles[0][i]<XMIN) particles[0][i] = XMIN;
-        else if (particles[0][i]>XMAX) particles[0][i] = XMAX;
+        else if (particles[0][i]>maze_xmax) particles[0][i] = maze_xmax;
         if (particles[1][i]<YMIN) particles[1][i] = YMIN;
-        else if (particles[1][i]>YMAX) particles[1][i] = YMAX;
+        else if (particles[1][i]>maze_ymax) particles[1][i] = maze_ymax;
 
     }
 }
@@ -475,27 +486,63 @@ void publish_mean(){
     position_pub.publish(position);
 }
 
+bool setup(){
+    if (!nh.hasParam("has_parameters")){
+        return false;
+    }
+    nh.getParam("/rot_spread", rot_spread);
+    nh.getParam("/vel_spread", vel_spread);
+    nh.getParam("/updates_before_resample", updates_before_resample);
+    nh.getParam("/times_to_resample", times_to_resample);
+    nh.getParam("/prob_sigma", prob_sigma);
+    nh.getParam("/maze_xmax", maze_xmax);
+    nh.getParam("/maze_ymax", maze_ymax);
+
+    std::vector<double> ir_positions_temp;
+
+    for(int i=0;i<NUM_OBSERVATIONS;i++){
+        std::string temp = "/ir_positions_";
+        temp += boost::lexical_cast<std::string>(i+1);
+        nh.getParam(temp, ir_positions_temp);
+        sensor_positions[i][0] = ir_positions_temp[0];
+        sensor_positions[i][1] = ir_positions_temp[1];
+        sensor_positions[i][2] = ir_positions_temp[2];
+    }
+    bool known_pos;
+    nh.getParam("/known_pos", known_pos);
+    if(known_pos){
+        nh.getParam("/start_x", position.x);
+        nh.getParam("/start_y", position.y);
+        nh.getParam("/start_theta", position.theta);
+        init_known_pos(position.x, position.y, position.theta);
+    }
+    else{
+        //Unknown position
+
+    }
+    return true;
+}
+
+
 
 int main(int argc,char **argv){
-    init_known_pos(0.68, 0.22, 0.0);
-    position.x = 0.68;
-    position.y = 0.22;
-    position.theta = 0.0;
-    //init_known_pos(0.3,1.0,0.0);
-    //init_un_known_pos(0.0, 0.0, XMAX, YMAX);
+
     ros::init(argc,argv,"particle_filter");
-    ros::NodeHandle n;
 
-    odom_sub = n.subscribe("/odometry",100,odom_callback);
-    obs_sub = n.subscribe("/ir_measurements", 100, get_observations);
+    if(!setup()){
+        return 1; //Error, no parameters
+    }
 
-    particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles", 100);
-    beams_pub = n.advertise<visualization_msgs::MarkerArray>("/beams", 100);
-    ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query", 100);
-    position_pub = n.advertise<localization::Position>("/position", 100);
-    pos_marker_pub = n.advertise<visualization_msgs::Marker>("/pos_marker", 100);
+    odom_sub = nh.subscribe("/odometry",100,odom_callback);
+    obs_sub = nh.subscribe("/ir_measurements", 100, get_observations);
 
-    ros::Subscriber map_subscriber = n.subscribe("/map_reader/map", 100, read_map);
+    particles_pub = nh.advertise<geometry_msgs::PoseArray>("/particles", 100);
+    beams_pub = nh.advertise<visualization_msgs::MarkerArray>("/beams", 100);
+    ros::Publisher map_query_publisher = nh.advertise<std_msgs::Bool>("/map_reader/query", 100);
+    position_pub = nh.advertise<localization::Position>("/position", 100);
+    pos_marker_pub = nh.advertise<visualization_msgs::Marker>("/pos_marker", 100);
+
+    ros::Subscriber map_subscriber = nh.subscribe("/map_reader/map", 100, read_map);
 
 
     while (!has_map && ros::ok()){
