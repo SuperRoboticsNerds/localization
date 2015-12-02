@@ -21,7 +21,7 @@
 #define UPDATES_BEFORE_RESAMPLE 5
 #define TIMES_TO_RESAMPLE 1
 #define SIGMA 0.001
-#define NUM_WALLS 15
+#define NUM_WALLS 100 //This is just because I don't know how many they are
 #define XMIN 0.0
 #define XMAX 2.48
 #define YMIN 0.0
@@ -39,6 +39,7 @@ ros::Publisher pos_marker_pub;
 ros::Subscriber odom_sub;
 ros::Subscriber vel_sub;
 ros::Subscriber obs_sub;
+int number_of_walls = 0;
 int global_index = 0;
 int observations_actually_observed = 0;
 double safety_distance = 0.05; //if particle is closer to the walls than this they will bounce
@@ -215,7 +216,7 @@ void publishBeams(double px,double py,double th){
         x2 = x + 100.0*cos(theta);
         y2 = y + 100.0*sin(theta);
         shortest = 100.0;
-        for(int j=0;j<NUM_WALLS;j++){
+        for(int j=0;j<number_of_walls;j++){
             if(get_intersection_distance(x,y,x2,y2,walls[j][0],walls[j][1],walls[j][2],walls[j][3],&distance)){
                 if (distance<shortest){
                     shortest = distance;
@@ -264,7 +265,7 @@ void get_predicted_observations(double px,double py, double th){
         x2 = x + 100.0*cos(theta);
         y2 = y + 100.0*sin(theta);
         shortest = 100.0;
-        for(int j=0;j<NUM_WALLS;j++){
+        for(int j=0;j<number_of_walls;j++){
             if(get_intersection_distance(x,y,x2,y2,walls[j][0],walls[j][1],walls[j][2],walls[j][3],&distance)){
                 if (distance<shortest){
                     shortest = distance;
@@ -361,8 +362,8 @@ void draw(){
 
 //Called once to read the map published from another ros node
 void read_map(const localization::Map_message::ConstPtr& msg){
-
-    for(int i=0;i<NUM_WALLS;i++){
+    number_of_walls = msg->number_of_walls;
+    for(int i=0;i<number_of_walls;i++){
         walls[i][0] = msg->points[i*4];
         walls[i][1] = msg->points[i*4+1];
         walls[i][2] = msg->points[i*4+2];
