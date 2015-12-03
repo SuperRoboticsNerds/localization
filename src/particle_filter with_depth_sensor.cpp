@@ -23,6 +23,7 @@
 #define UPDATES_BEFORE_RESAMPLE 5
 #define TIMES_TO_RESAMPLE 1
 #define SIGMA 0.001
+#define PRIMESENSE_SIGMA 0.001
 #define NUM_WALLS 100 //This is just because I don't know how many they are
 #define XMIN 0.0
 #define YMIN 0.0
@@ -113,6 +114,11 @@ bool has_odom = false;
 
 double normal_distribution_probabilitiy(double mean,double value){
     return (1.0/(SIGMA*sqrt(2.0*PI)))*exp(-((value-mean)*(value-mean))/(2.0*SIGMA*SIGMA));
+}
+
+
+double primesense_normal_distribution_probabilitiy(double mean,double value){
+    return (1.0/(PRIMESENSE_SIGMA*sqrt(2.0*PI)))*exp(-((value-mean)*(value-mean))/(2.0*PRIMESENSE_SIGMA*PRIMESENSE_SIGMA));
 }
 
 //Initialize all particles at the same position(will soon be spread out)
@@ -340,7 +346,7 @@ void get_probabilities(){
         for(int j=0;j<NUM_PRIMESENSE_OBSERVATIONS;j++){
             //TODO: this could be optimized a lot! It could be a good idea to not have an if here but rather let the loop be decided outside. Don't know how to do this though.
             if(primesense_observations[j]>=0.01){ //The if-statement gets rid of shitty readings.
-                prob+=normal_distribution_probabilitiy(predicted_primesense_observations[j],primesense_observations[j]);
+                prob+=primesense_normal_distribution_probabilitiy(predicted_primesense_observations[j],primesense_observations[j]);
             }
         }
         //std::cout << prob << std::endl;
