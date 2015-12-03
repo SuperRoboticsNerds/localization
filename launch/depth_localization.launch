@@ -1,0 +1,17 @@
+<launch>
+
+<node
+ name="depth_readings_publisher" pkg="localization" type="depth_readings_publisher" />
+
+
+<node
+ name="particle_filter_with_depth_sensor" pkg="localization" type="particle_filter_with_depth_sensor" />
+
+<node
+name="map_reader" pkg="localization" type="map_reader.py"/>
+
+<node
+name="distance_converter" pkg="localization" type="distance_converter"/>
+
+</launch>
+

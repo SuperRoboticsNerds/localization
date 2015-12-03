@@ -48,3 +48,6 @@ target_link_libraries(distance_converter ${catkin_LIBRARIES})
 add_executable(depth_readings_publisher_node src/depth_readings_publisher.cpp)
 target_link_libraries(depth_readings_publisher_node ${PCL_DEFINITIONS} ${catkin_LIBRARIES})
 
+
+add_executable(particle_filter_with_depth_sensor src/particle_filter_with_depth_sensor.cpp)
+target_link_libraries(particle_filter_with_depth_sensor ${catkin_LIBRARIES})

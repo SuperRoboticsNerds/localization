@@ -9,7 +9,7 @@ find_package(catkin REQUIRED COMPONENTS
 PCL REQUIRED
 )
 
-find_package(  )
+#find_package( PCL REQUIRED )
 
 add_message_files(
 	FILES
@@ -48,3 +48,6 @@ target_link_libraries(distance_converter ${catkin_LIBRARIES})
 add_executable(depth_readings_publisher_node src/depth_readings_publisher.cpp)
 target_link_libraries(depth_readings_publisher_node ${PCL_DEFINITIONS} ${catkin_LIBRARIES})
 
+
+add_executable(particle_filter src/particle_filter.cpp)
+target_link_libraries(particle_filter ${catkin_LIBRARIES})

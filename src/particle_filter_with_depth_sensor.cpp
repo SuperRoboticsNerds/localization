@@ -322,7 +322,7 @@ void get_predicted_primesense_observations(double px,double py, double th){
                 }
             }
         }
-       predicted_primesense_observaions[i] = shortest;
+       predicted_primesense_observations[i] = shortest;
        global_index = i+1;
 
     }
@@ -435,7 +435,7 @@ void get_observations(const localization::Distance_message::ConstPtr& msg){
 
 void get_primesense_observations(const localization::Depth_Ranges::ConstPtr& msg){
     for (int i=0;i<NUM_PRIMESENSE_OBSERVATIONS;i++){
-        temp__primesense_observations[i] = msg->distances[i];
+        temp_primesense_observations[i] = msg->distances[i];
         primesense_angles[i] = msg->angles[i];
     }
     has_primesense_measurements = true;
