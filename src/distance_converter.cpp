@@ -127,12 +127,12 @@ void adcallback(const ras_arduino_msgs::ADConverter::ConstPtr& msg){
 
     localization::Distance_message out;
 
-    out.d1 = sensor1_conv(get_median(s_1)) * 0.01;
-    out.d2 = sensor2_conv(get_median(s_2)) * 0.01;
-    out.d3 = sensor3_conv(get_median(s_3)) * 0.01;
-    out.d4 = sensor4_conv(get_median(s_4)) * 0.01;
-    out.d5 = sensor5_conv(get_median(s_5)) * 0.01;
-    out.d6 = sensor6_conv(get_median(s_6)) * 0.01;
+    out.d1 = sensor1_conv(get_median(s_1))*0.01;
+    out.d2 = sensor2_conv(get_median(s_2))*0.01;
+    out.d3 = sensor3_conv(get_median(s_3))*0.01;
+    out.d4 = sensor4_conv(get_median(s_4))*0.01;
+    out.d5 = sensor5_conv(get_median(s_5))*0.01;
+    out.d6 = sensor6_conv(get_median(s_6))*0.01;
     distance_pub.publish(out);
 }
 

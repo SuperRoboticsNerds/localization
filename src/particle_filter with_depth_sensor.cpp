@@ -5,6 +5,7 @@
 #include "localization/Map_message.h"
 #include "localization/Distance_message.h"
 #include "localization/Position.h"
+#include "localization/Depth_Ranges.h"
 #include "geometry_msgs/Twist.h"
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -18,13 +19,15 @@
 
 #define NUM_PARTICLES 10000
 #define NUM_OBSERVATIONS 6
-#define NUM_DEPTH_OBSERVATIONS 10
+#define NUM_PRIMESENSE_OBSERVATIONS 10
 #define UPDATES_BEFORE_RESAMPLE 5
 #define TIMES_TO_RESAMPLE 1
 #define SIGMA 0.001
 #define NUM_WALLS 100 //This is just because I don't know how many they are
 #define XMIN 0.0
 #define YMIN 0.0
+
+//TODO: some things are very hard coded such as how the observations are received
 
 //Random number tror jag, testa : number = (double)std::rand() / (double)(std::RAND_MAX)
 
@@ -38,6 +41,7 @@ ros::Publisher pos_marker_pub;
 ros::Subscriber odom_sub;
 ros::Subscriber vel_sub;
 ros::Subscriber obs_sub;
+ros::Subscriber primesense_obs_sub;
 
 int number_of_walls = 0;
 int global_index = 0;
@@ -49,12 +53,21 @@ double particles[NUM_PARTICLES][3]; //x,y,theta
 double temp_particles[NUM_PARTICLES][3]; // x,y,theta
 double probabilities[NUM_PARTICLES];
 double predicted_observaions[NUM_OBSERVATIONS];
+double predicted_primesense_observations[NUM_PRIMESENSE_OBSERVATIONS];
 double observations[NUM_OBSERVATIONS];
+double primesense_observations[NUM_PRIMESENSE_OBSERVATIONS];
 double temp_observations[NUM_OBSERVATIONS];
+double temp_primesense_observations[NUM_PRIMESENSE_OBSERVATIONS];
+
 double walls[NUM_WALLS][4];
 double cumsum[NUM_PARTICLES];
 double temp_probabilities[NUM_PARTICLES];
 
+//Primesense position
+
+double primesense_x = 0.0;
+double primesense_y = 0.0;
+double primesense_theta = 0.0;
 
 
 // Rosparam settings
@@ -69,6 +82,7 @@ double maze_ymax = 0.0;
 
 //Define the positions and orientations of the sensors here. {X,Y,THETA} THETA = 0 is straight forward.
 double sensor_positions[NUM_OBSERVATIONS][3];
+double primesense_angles[NUM_PRIMESENSE_OBSERVATIONS];
 
     /*
     //Erik's measurements (crude)
@@ -89,19 +103,11 @@ double sensor_positions[NUM_OBSERVATIONS][3];
     {-0.013,0.026,PI/2.0},
     {-0.09,0.017, PI}
 */
-/*
-        //{X,Y, Rotation Theta} Where pi/2 = 1.5707
-        {0.075,-0.04,3.1416},      // Short Range Left Front
-        {-0.0745,-0.04,3.1416},     // Short Range Left Back
-        {0.0745,0.04,0},       // Short Range Right Front
-        {-0.07,0.04,0},        // Short Range Right Back
-        {0.0225,0,1.5707},           // Long Range Front  //or distance_sensor_forward_right_link
-        {0.0225,0,1.5707}
-    */
 
 
 bool has_map = false;
 bool has_measurements = false;
+bool has_primesense_measurements = false;
 bool has_odom = false;
 
 
@@ -284,31 +290,57 @@ void get_predicted_observations(double px,double py, double th){
                 }
             }
         }
-        //std::cout << x << " "<< y << " "<< theta << std::endl;
-       // marker_array.markers.push_back(getMarker(x,y,theta,shortest));
-       // std::cout << shortest << " ";
-
        predicted_observaions[i] = shortest;
        global_index = i+1;
 
     }
-    //test_pub.publish(marker_array);
-    //std::cout << std::endl;
 }
+
+
+
+void get_predicted_primesense_observations(double px,double py, double th){
+    //visualization_msgs::MarkerArray marker_array;
+    double x,y,theta,x2,y2,distance,shortest;
+    for (int i=0;i<NUM_PRIMESENSE_OBSERVATIONS;i++){
+        theta = th + primesense_angles[i];
+        x = px + primesense_x*cos(th) - primesense_y*sin(th);
+        y = py + primesense_x*sin(th) + primesense_y*cos(th);
+
+        x2 = x + 100.0*cos(theta);
+        y2 = y + 100.0*sin(theta);
+        shortest = 100.0;
+        for(int j=0;j<number_of_walls;j++){
+            if(get_intersection_distance(x,y,x2,y2,walls[j][0],walls[j][1],walls[j][2],walls[j][3],&distance)){
+                if (distance<shortest){
+                    shortest = distance;
+                }
+            }
+        }
+       predicted_primesense_observaions[i] = shortest;
+       global_index = i+1;
+
+    }
+}
+
 
 //Assigns probabilities to the particles depending on the map
 void get_probabilities(){
     for (int i=0;i<NUM_PARTICLES;i++){
         double prob = 0.0;
         get_predicted_observations(particles[i][0],particles[i][1],particles[i][2]);
-        for(int j=0;j<NUM_OBSERVATIONS;j++){
+        get_predicted_primesense_observations(particles[i][0],particles[i][1],particles[i][2]);
 
+        for(int j=0;j<NUM_OBSERVATIONS;j++){
             //TODO: this could be optimized a lot! It could be a good idea to not have an if here but rather let the loop be decided outside. Don't know how to do this though.
             if(observations[j]>=0.01){ //The if-statement gets rid of shitty readings.
                 prob+=normal_distribution_probabilitiy(predicted_observaions[j],observations[j]);
             }
-            else{
+        }
 
+        for(int j=0;j<NUM_PRIMESENSE_OBSERVATIONS;j++){
+            //TODO: this could be optimized a lot! It could be a good idea to not have an if here but rather let the loop be decided outside. Don't know how to do this though.
+            if(primesense_observations[j]>=0.01){ //The if-statement gets rid of shitty readings.
+                prob+=normal_distribution_probabilitiy(predicted_primesense_observations[j],primesense_observations[j]);
             }
         }
         //std::cout << prob << std::endl;
@@ -395,11 +427,27 @@ void get_observations(const localization::Distance_message::ConstPtr& msg){
     has_measurements = true;
 }
 
+void get_primesense_observations(const localization::Depth_Ranges::ConstPtr& msg){
+    for (int i=0;i<NUM_PRIMESENSE_OBSERVATIONS;i++){
+        temp__primesense_observations[i] = msg->distances[i];
+        primesense_angles[i] = msg->angles[i];
+    }
+    has_primesense_measurements = true;
+}
+
+
+
 void lockObserations(){
     observations_actually_observed = 0;
     for(int i=0 ;i<NUM_OBSERVATIONS;i++){
         observations[i] = temp_observations[i];
         if(observations[i]>0.01){
+            observations_actually_observed+=1;
+        }
+    }
+    for(int i=0 ;i<NUM_PRIMESENSE_OBSERVATIONS;i++){
+        primesense_observations[i] = temp_primesense_observations[i];
+        if(primesense_observations[i]>0.01){
             observations_actually_observed+=1;
         }
     }
@@ -463,7 +511,6 @@ void calc_mean(){
     marker.pose.position.x = position.x;
     marker.pose.position.y = position.y;
     marker.pose.position.z = 0;
-
 
 
     marker.pose.orientation = tf::createQuaternionMsgFromYaw( position.theta );
@@ -537,15 +584,17 @@ int main(int argc,char **argv){
     }
 
     odom_sub = n.subscribe("/odometry",100,odom_callback);
-    obs_sub = n.subscribe("/ir_measurements", 100, get_observations);
+    obs_sub = n.subscribe("/ir_measurements", 10, get_observations);
+    primesense_obs_sub = n.subscribe("//localization/depth_ranges", 10, get_primesense_observations);
 
-    particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles", 100);
-    beams_pub = n.advertise<visualization_msgs::MarkerArray>("/beams", 100);
-    ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query", 100);
-    position_pub = n.advertise<localization::Position>("/position", 100);
-    pos_marker_pub = n.advertise<visualization_msgs::Marker>("/pos_marker", 100);
 
-    ros::Subscriber map_subscriber = n.subscribe("/map_reader/map", 100, read_map);
+    particles_pub = n.advertise<geometry_msgs::PoseArray>("/particles", 10);
+    beams_pub = n.advertise<visualization_msgs::MarkerArray>("/beams", 10);
+    ros::Publisher map_query_publisher = n.advertise<std_msgs::Bool>("/map_reader/query", 10);
+    position_pub = n.advertise<localization::Position>("/position", 10);
+    pos_marker_pub = n.advertise<visualization_msgs::Marker>("/pos_marker", 10);
+
+    ros::Subscriber map_subscriber = n.subscribe("/map_reader/map", 10, read_map);
 
 
     while (!has_map && ros::ok()){
@@ -565,7 +614,7 @@ int main(int argc,char **argv){
 
     while (ros::ok()){
         //std::cout << has_odom << ' '<< has_measurements << ' ' << forward_movement << ' ' << rotation_movement << std::endl;
-        if(has_measurements && has_odom && (forward_movement>0.01 || rotation_movement>0.05 || forward_movement < -0.01 || rotation_movement < -0.05)){
+        if(has_measurements && has_primesense_measurements && has_odom && (forward_movement>0.01 || rotation_movement>0.05 || forward_movement < -0.01 || rotation_movement < -0.05)){
 
             std::cout << "calculating..."<<std::endl;
             lockObserations();

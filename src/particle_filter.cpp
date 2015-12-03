@@ -482,6 +482,8 @@ void calc_mean(){
 }
 
 void publish_mean(){
+    position.x *= 100.0;
+    position.y *= 100.0;
 
     position_pub.publish(position);
 }
