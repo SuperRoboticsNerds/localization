@@ -84,6 +84,7 @@ double maze_ymax = 0.0;
 //Define the positions and orientations of the sensors here. {X,Y,THETA} THETA = 0 is straight forward.
 double sensor_positions[NUM_OBSERVATIONS][3];
 double primesense_angles[NUM_PRIMESENSE_OBSERVATIONS];
+double temp_primesense_angles[NUM_PRIMESENSE_OBSERVATIONS];
 
     /*
     //Erik's measurements (crude)
@@ -214,7 +215,7 @@ void publishBeams(double px,double py,double th){
 
     double x,y,theta,x2,y2,distance,shortest;
 
-    for(int i=0;i<NUM_OBSERVATIONS;i++){
+    for(int i=0;i<NUM_OBSERVATIONS + NUM_PRIMESENSE_OBSERVATIONS;i++){
 
         visualization_msgs::Marker marker;
         geometry_msgs::Point start_point;
@@ -233,9 +234,18 @@ void publishBeams(double px,double py,double th){
         marker.color.g = 0.1;
         marker.color.b = 1.0;
 
-        theta = th + sensor_positions[i][2];
-        x = px + sensor_positions[i][0]*cos(th) - sensor_positions[i][1]*sin(th);
-        y = py + sensor_positions[i][0]*sin(th) + sensor_positions[i][1]*cos(th);
+        //Depth sensors
+        if (i<NUM_OBSERVATIONS){
+            theta = th + sensor_positions[i][2];
+            x = px + sensor_positions[i][0]*cos(th) - sensor_positions[i][1]*sin(th);
+            y = py + sensor_positions[i][0]*sin(th) + sensor_positions[i][1]*cos(th);
+        }
+        else{
+            theta = th + primesense_angles[i];
+            x = px + primesense_x*cos(th) - primesense_y*sin(th);
+            y = py + primesense_x*sin(th) + primesense_y*cos(th);
+        }
+
 
         x2 = x + 100.0*cos(theta);
         y2 = y + 100.0*sin(theta);
@@ -253,10 +263,18 @@ void publishBeams(double px,double py,double th){
         start_point.z = 0.09;
 
         if(observations[i] >0.01){
+            if (i<NUM_OBSERVATIONS){
 
             intersection_point.x = x + observations[i]*cos(theta);
             intersection_point.y = y + observations[i]*sin(theta);
             intersection_point.z = 0.09;
+            }
+            else{
+                intersection_point.x = x + primesense_observations[i]*cos(theta);
+                intersection_point.y = y + primesense_observations[i]*sin(theta);
+                intersection_point.z = 0.09;
+
+            }
         }
         else{
             intersection_point.x = x;
@@ -436,7 +454,7 @@ void get_observations(const localization::Distance_message::ConstPtr& msg){
 void get_primesense_observations(const localization::Depth_Ranges::ConstPtr& msg){
     for (int i=0;i<NUM_PRIMESENSE_OBSERVATIONS;i++){
         temp_primesense_observations[i] = msg->distances[i];
-        primesense_angles[i] = msg->angles[i];
+        temp_primesense_angles[i] = msg->angles[i];
     }
     has_primesense_measurements = true;
 }
@@ -453,6 +471,7 @@ void lockObserations(){
     }
     for(int i=0 ;i<NUM_PRIMESENSE_OBSERVATIONS;i++){
         primesense_observations[i] = temp_primesense_observations[i];
+        primesense_angles[i] = temp_primesense_angles[i];
         if(primesense_observations[i]>0.01){
             observations_actually_observed+=1;
         }
