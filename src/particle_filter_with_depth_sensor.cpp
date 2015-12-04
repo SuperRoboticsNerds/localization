@@ -21,7 +21,7 @@
 #define NUM_OBSERVATIONS 6
 #define NUM_PRIMESENSE_OBSERVATIONS 10
 #define UPDATES_BEFORE_RESAMPLE 5
-#define TIMES_TO_RESAMPLE 1
+#define TIMES_TO_RESAMPLE 3
 #define SIGMA 0.001
 #define PRIMESENSE_SIGMA 0.001
 #define NUM_WALLS 100 //This is just because I don't know how many they are
@@ -66,7 +66,7 @@ double temp_probabilities[NUM_PARTICLES];
 
 //Primesense position
 
-double primesense_x = 0.0;
+double primesense_x = 0.03;
 double primesense_y = 0.0;
 double primesense_theta = 0.0;
 
@@ -201,12 +201,12 @@ void update(){
                 break; //Doesn't take into consideration that a line might cross two walls
             }
         }
-        */
-        if (particles[0][i]<XMIN) particles[0][i] = XMIN;
-        else if (particles[0][i]>maze_xmax) particles[0][i] = maze_xmax;
-        if (particles[1][i]<YMIN) particles[1][i] = YMIN;
-        else if (particles[1][i]>maze_ymax) particles[1][i] = maze_ymax;
 
+        if (particles[i][0]<XMIN) particles[i][0] = XMIN;
+        else if (particles[i][0]>maze_xmax) particles[i][0] = maze_xmax;
+        if (particles[i][1]<YMIN) particles[i][1] = YMIN;
+        else if (particles[i][1]>maze_ymax) particles[i][1] = maze_ymax;
+        */
     }
 }
 
@@ -645,8 +645,9 @@ int main(int argc,char **argv){
             lockObserations();
             update();
 
+
             get_probabilities();
-            number_of_updates += 1;
+
             if (number_of_updates>= UPDATES_BEFORE_RESAMPLE)
             {
 
@@ -656,6 +657,8 @@ int main(int argc,char **argv){
                 }
                 number_of_updates = 0;
             }
+
+            number_of_updates += 1;
             draw(); //TODO: comment or uncomment this!!!
             calc_mean();
             has_measurements = false;
