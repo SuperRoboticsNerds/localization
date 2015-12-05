@@ -476,6 +476,7 @@ void lockObserations(){
             observations_actually_observed+=1;
         }
     }
+    position.time = ros::Time::now().toSec();
 }
 
 //Updates the odometry
@@ -555,7 +556,6 @@ void calc_mean(){
 }
 
 void publish_mean(){
-
     position_pub.publish(position);
 }
 
