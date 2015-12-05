@@ -6,7 +6,8 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   message_generation
-PCL REQUIRED
+  pcl_conversions
+  pcl_ros
 )
 
 #find_package( PCL REQUIRED )
