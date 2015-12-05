@@ -43,7 +43,7 @@ void callback(const PointCloud::ConstPtr& msg)
 
         double z_distance = cos(ANGLE_TO_FLOOR)*pt.z;
         double distance = sqrt(pt.x*pt.x + z_distance*z_distance);
-        double angle = atan2(pt.x,z_distance);
+        double angle = -atan2(pt.x,z_distance);
 
         //Check if nan
         if (distance != distance){

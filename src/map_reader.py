@@ -41,7 +41,7 @@ def callback(data):
 def main():
     global pub, points
     the_file_name_hurr_durr = rospy.get_param("/map_file")
-    filename = os.path.expanduser('~')  +"/catkin_ws/src/ras_maze/ras_maze_map/maps/" + the_file_name_hurr_durr
+    filename = os.path.expanduser('~')  +"/catkin_ws/src/ras_maze_map/maps/" + the_file_name_hurr_durr
     #filename = os.path.expanduser('~') + "/catkin_ws/src/ras_maze_map/maps/contest_rehersal_maze.txt"
     points = initialize_map(filename) #TODO should be a config file or something
     rospy.init_node('map_reader', anonymous=True)
