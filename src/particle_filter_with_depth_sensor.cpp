@@ -560,7 +560,7 @@ void publish_mean(){
 }
 
 bool setup(ros::NodeHandle nh){
-    if (!nh.hasParam("has_parameters")){
+    if (!nh.hasParam("/has_parameters")){
         return false;
     }
     nh.getParam("/rot_spread", rot_spread);
