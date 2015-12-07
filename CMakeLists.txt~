@@ -6,7 +6,8 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   message_generation
-PCL REQUIRED
+  pcl_conversions
+  pcl_ros
 )
 
 #find_package( PCL REQUIRED )
@@ -49,5 +50,8 @@ add_executable(depth_readings_publisher_node src/depth_readings_publisher.cpp)
 target_link_libraries(depth_readings_publisher_node ${PCL_DEFINITIONS} ${catkin_LIBRARIES})
 
 
-add_executable(particle_filter src/particle_filter.cpp)
-target_link_libraries(particle_filter ${catkin_LIBRARIES})
+add_executable(particle_filter_with_depth_sensor src/particle_filter_with_depth_sensor.cpp)
+target_link_libraries(particle_filter_with_depth_sensor ${catkin_LIBRARIES})
+
+add_executable(kidnapped_particle_filter_with_depth_sensor src/kidnapped_particle_filter_with_depth_sensor.cpp)
+target_link_libraries(kidnapped_particle_filter_with_depth_sensor ${catkin_LIBRARIES})

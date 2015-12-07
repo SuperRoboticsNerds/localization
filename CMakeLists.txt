@@ -52,3 +52,6 @@ target_link_libraries(depth_readings_publisher_node ${PCL_DEFINITIONS} ${catkin_
 
 add_executable(particle_filter_with_depth_sensor src/particle_filter_with_depth_sensor.cpp)
 target_link_libraries(particle_filter_with_depth_sensor ${catkin_LIBRARIES})
+
+add_executable(kidnapped_particle_filter_with_depth_sensor src/kidnapped_particle_filter_with_depth_sensor.cpp)
+target_link_libraries(kidnapped_particle_filter_with_depth_sensor ${catkin_LIBRARIES})

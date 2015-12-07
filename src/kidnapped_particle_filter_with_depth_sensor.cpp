@@ -193,7 +193,7 @@ void update(){
         particles[i][1] +=  forward_while_update*sin(particles[i][2]) + forward_while_update*vel_spread*rand_vel*sin(particles[i][2]);
 
         //updated particles should never cross walls.
-        /*
+        
         for (int j=0;j<NUM_WALLS;j++){
             if(get_intersection_distance(particles[i][0],particles[i][1],newx,newy,walls[j][0],walls[j][1],walls[j][2],walls[j][3],&distance)){
                 newx = particles[i][0] +  cos(particles[i][2]) * (distance - safety_distance);
@@ -206,7 +206,7 @@ void update(){
         else if (particles[i][0]>maze_xmax) particles[i][0] = maze_xmax;
         if (particles[i][1]<YMIN) particles[i][1] = YMIN;
         else if (particles[i][1]>maze_ymax) particles[i][1] = maze_ymax;
-        */
+        
     }
 }
 
